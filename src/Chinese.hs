@@ -11,7 +11,7 @@ import Control.Monad.State
 import Control.Monad.Writer
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Data.List (partition,(\\),intersect)
+import Data.List (partition,(\\),intersect,foldl')
 import System.Random
 import ListUtils
 
@@ -24,7 +24,7 @@ data Info a b = Info
     {
       iden :: S.Set a
     , sampleTarget :: S.Set a
-    , cache :: M.Map a b
+    , cache :: M.Map (S.Set a) b
     , rands :: [Bool] --uniform
     , noise :: [Bool]
     }
@@ -33,20 +33,22 @@ data Info a b = Info
 main = do
   st <- initSubset (S.fromList [1..10]) (S.fromList [1,3,5])
   let (a,w) = run st
-  mapM_ putStrLn w
+--  mapM_ putStrLn w
   return a
 
 run st = runWriter.evalStateT (mad (S.fromList [])) $ st
 
-mad :: S.Set Int -> Subset Int (M Int) (M Int)
-mad a = improve a
+mad :: S.Set Int -> Subset Int (M Int) [(Int,Double)]
+mad a = do
+  dss <- sequence (replicate 10 (improve a))
+  return.rsortOn snd.M.toList.foldl' (M.unionWith (+)) M.empty $ dss
 
 initSubset :: S.Set Int -> S.Set Int -> IO (Info Int (M Int))
 initSubset iden tar = do
   gen <- newStdGen
   gen2 <- newStdGen
   let rs = randomRs (False,True) gen
-      ns = map (<=1.0) $ randomRs (0,1.0::Double) gen
+      ns = map (<=0.5) $ randomRs (0,1.0::Double) gen
   return $ Info iden tar M.empty rs ns
 
 type Subset a b = StateT (Info a b) (Writer [String])
@@ -72,14 +74,22 @@ instance (Show a,Ord a,Reserved a) => Rem (S.Set a) (M a) (Subset a (M a)) where
                         p2' = S.fromList $ map snd p2
 
     sample a = do
-      target <- gets sampleTarget
-      idn <- gets (S.toList.iden)
-      let extra = S.toList $ target `S.difference` a
-          zeroR = S.size (a `S.intersection` target) > 0
-          probs = if null extra then [(reserved,1)]
-                  else if zeroR then [(reserved,0.5),(head extra,0.5)]
-                       else [(reserved,0),(head extra,1)]
-      liftM (M.fromList) (noisify probs)
+      mval <- fetch a
+      case mval of
+        Just ps -> return ps
+        Nothing ->
+            do
+              target <- gets sampleTarget
+              idn <- gets iden
+              let extra = S.toList $ target `S.difference` a
+                  rem = head.S.toList.S.difference idn $ a
+                  zeroR = S.size (a `S.intersection` target) > 0
+                  probs = if null extra then [(reserved,1),(rem,0)]
+                          else if zeroR then [(reserved,0.5),(rem,0.5)]
+                               else [(reserved,0),(rem,1)]
+              ps <- noisify (M.fromList probs)
+              addToCache a ps
+              return ps
 
     isomorph ma mb = do
       (a,da) <- ma
@@ -89,8 +99,14 @@ instance (Show a,Ord a,Reserved a) => Rem (S.Set a) (M a) (Subset a (M a)) where
           da' = M.map (zeroB*) da
           db' = M.map (zeroA*) db
           final = normalize $ M.insert reserved (zeroA*zeroB) (M.union da' db')
-      logg $ "Isomorphing from " ++ show a ++ " and " ++ show b ++ " to " ++ show (S.intersection a b) ++ " : " ++ show final
+      logg $ "Isomorph: " ++ show da ++ " and " ++ show db ++ " = " ++ show final
       return final
+
+addToCache a ps = do
+  ch <- gets cache
+  modify (\s -> s{cache=M.insert a ps ch})
+
+fetch a = gets (M.lookup a.cache)
 
 noisify ps = do
   (p:_,ts) <- gets (splitAt 1.noise)
@@ -99,11 +115,10 @@ noisify ps = do
   if p == True
    then return ps
    else do
-     let ans = snd.head.filter ((==True).fst).zip [u,not u] $ space \\ [ps]
+     let scale = if u then 0.2 else 0.3
+         ans = normalize.M.map (\p -> scale*p+scale) $ ps
      logg $ "This one has noise: " ++ show ans
      return ans
-    where is = map fst ps
-          space = map (zip is) [[1],[0,1],[0.5,0.5]]
 
 normalize m = M.map (/total) m
     where total = M.fold (+) 0 m
