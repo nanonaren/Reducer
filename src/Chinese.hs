@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,TypeSynonymInstances,FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,TypeSynonymInstances,FunctionalDependencies,TupleSections #-}
 module Chinese
     (
     ) where
@@ -11,21 +11,22 @@ import Control.Monad.State
 import Control.Monad.Writer
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Data.List (partition,(\\))
+import Data.List (partition,(\\),intersect)
 import System.Random
 import ListUtils
 
 class Monad m => Rem a b m | m -> a b where
     coprimeFactors :: a -> m (Maybe (a,a))
     sample :: a -> m b
-    isomorph :: m b -> m b -> m b
+    isomorph :: m (a,b) -> m (a,b) -> m b
 
 data Info a b = Info
     {
       iden :: S.Set a
     , sampleTarget :: S.Set a
     , cache :: M.Map a b
-    , rands :: [Bool]
+    , rands :: [Bool] --uniform
+    , noise :: [Bool]
     }
 
 --main :: IO (M Int)
@@ -43,8 +44,10 @@ mad a = improve a
 initSubset :: S.Set Int -> S.Set Int -> IO (Info Int (M Int))
 initSubset iden tar = do
   gen <- newStdGen
+  gen2 <- newStdGen
   let rs = randomRs (False,True) gen
-  return $ Info iden tar M.empty rs
+      ns = map (<=1.0) $ randomRs (0,1.0::Double) gen
+  return $ Info iden tar M.empty rs ns
 
 type Subset a b = StateT (Info a b) (Writer [String])
 type M a = M.Map a Double
@@ -59,11 +62,9 @@ instance (Show a,Ord a,Reserved a) => Rem (S.Set a) (M a) (Subset a (M a)) where
     coprimeFactors d = do
       diff <- gets (flip S.difference d.iden)
       if S.size diff == 1
-       then logg (show d ++ " is a prime") >> return Nothing
+       then return Nothing
        else do
          (p1,p2) <- fmap (coprimes d diff) (takeRands (S.size diff))
-         logg ("Factorizing " ++ show d ++ " into (" ++ show p1
-               ++ ", " ++ show p2 ++ ")")
          return (Just (p1,p2))
         where coprimes com ext rands = (com`S.union`p1', com`S.union`p2')
                   where (p1,p2) = partition' fst (zip rands (S.toList ext))
@@ -73,24 +74,36 @@ instance (Show a,Ord a,Reserved a) => Rem (S.Set a) (M a) (Subset a (M a)) where
     sample a = do
       target <- gets sampleTarget
       idn <- gets (S.toList.iden)
-      let extras = S.toList $ target `S.difference` a
-          zeroR = S.size (a `S.intersection` target) < S.size a
-          elems = extras ++ if zeroR then [reserved] else []
-          numElems = fromIntegral (length elems)
-          probs = M.fromList $ zip elems (repeat (1/numElems))
-      logg $ "Sampling " ++ show a ++ " to get " ++ show probs
-      return probs
+      let extra = S.toList $ target `S.difference` a
+          zeroR = S.size (a `S.intersection` target) > 0
+          probs = if null extra then [(reserved,1)]
+                  else if zeroR then [(reserved,0.5),(head extra,0.5)]
+                       else [(reserved,0),(head extra,1)]
+      liftM (M.fromList) (noisify probs)
 
     isomorph ma mb = do
-      da <- ma
-      db <- mb
+      (a,da) <- ma
+      (b,db) <- mb
       let zeroA = getZero da
           zeroB = getZero db
           da' = M.map (zeroB*) da
           db' = M.map (zeroA*) db
           final = normalize $ M.insert reserved (zeroA*zeroB) (M.union da' db')
-      logg $ "Isomorphing " ++ show da ++ " and " ++ show db ++ " to get " ++ show final
+      logg $ "Isomorphing from " ++ show a ++ " and " ++ show b ++ " to " ++ show (S.intersection a b) ++ " : " ++ show final
       return final
+
+noisify ps = do
+  (p:_,ts) <- gets (splitAt 1.noise)
+  (u:_) <- takeRands 1
+  modify (\s -> s{noise=ts})
+  if p == True
+   then return ps
+   else do
+     let ans = snd.head.filter ((==True).fst).zip [u,not u] $ space \\ [ps]
+     logg $ "This one has noise: " ++ show ans
+     return ans
+    where is = map fst ps
+          space = map (zip is) [[1],[0,1],[0.5,0.5]]
 
 normalize m = M.map (/total) m
     where total = M.fold (+) 0 m
@@ -127,7 +140,7 @@ improve a = do
   facs <- coprimeFactors a
   case facs of
     Nothing -> sample a
-    Just (x,y) -> improve x `isomorph` improve y
+    Just (x,y) -> liftM (x,) (improve x) `isomorph` liftM (y,) (improve y)
 
 tests =
     [
