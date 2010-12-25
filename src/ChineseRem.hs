@@ -2,6 +2,7 @@
 module ChineseRem
     (
       Rem (..)
+    , divisorSearch
     ) where
 
 import Control.Monad
@@ -17,12 +18,12 @@ class Monad m => Rem a b m | m -> a b where
 
 
 --THE MAIN ALGORITHM--
-improve :: (Rem a b m) => a -> m b
-improve a = do
+divisorSearch :: (Rem a b m) => a -> m b
+divisorSearch a = do
   facs <- coprimeFactors a
   case facs of
     Nothing -> sample a
-    Just (x,y) -> liftM (x,) (improve x) `isomorph` liftM (y,) (improve y)
+    Just (x,y) -> liftM (x,) (divisorSearch x) `isomorph` liftM (y,) (divisorSearch y)
 
 
 -- eta, depth -> eta

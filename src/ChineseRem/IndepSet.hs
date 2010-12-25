@@ -1,7 +1,8 @@
 module ChineseRem.IndepSet
     (
       SetFinderIndep
-    , Reserved
+    , Reserved (..)
+    , MDist
     , create
     , normalize
     ) where

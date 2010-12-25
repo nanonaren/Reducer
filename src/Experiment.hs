@@ -5,9 +5,11 @@ module Main
     ) where
 
 import ChineseRem (divisorSearch)
-import ChineseRem.Set
+import ChineseRem.IndepSet
+import qualified Data.Map as M
 import qualified Data.Set as S
 import System.Console.CmdArgs
+import System.Random
 
 {-
 # Test various sizes
@@ -45,14 +47,16 @@ instance Reserved Int where
 main = do
   options <- cmdArgs opts
   gen <- newStdGen
+  gen2 <- newStdGen
   let exp = Exp {
               noises = map (<=(1-noise options)) $ randomRs (0,1.0::Double) gen
+            , rands = randomRs (False,True) gen2
             , sampleTarget = S.fromList $ take (targetSize options) [1..]
             }
-      st = create exp sampler isomorpher (take (size options) [1..])
+      st = create exp sampler (take (size options) [1..])
   return ()
 
-sampler :: Exp -> S.Set Int -> S.Set Int -> (S.Set Int,M Int)
+sampler :: Exp -> S.Set Int -> S.Set Int -> (Exp,MDist Int)
 sampler expData idn a =
   let target = sampleTarget expData
       extra = S.toList $ target `S.difference` a
@@ -64,12 +68,12 @@ sampler expData idn a =
   in noisify expData (M.fromList probs)
 
 noisify dat ps =
-  let (p:_,ts) = splitAt 1.noise $ dat
+  let (p:_,ts) = splitAt 1.noises $ dat
       (u:_,rs) = splitAt 1.rands $ dat
       dat' = dat{rands=rs,noises=ts}
-  if p == True
-   then return (dat',ps)
-   else do
-     let scale = if u then 0.2 else 0.3
-         ans = normalize.M.map (\p -> scale*p+scale) $ ps
-     return (dat',ans)
+  in if p == True
+     then (dat',ps)
+     else
+         let scale = if u then 0.2 else 0.3
+             ans = normalize.M.map (\p -> scale*p+scale) $ ps
+         in (dat',ans)
