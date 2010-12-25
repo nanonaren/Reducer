@@ -31,16 +31,16 @@ data Info a b = Info
 
 --main :: IO (M Int)
 main = do
-  st <- initSubset (S.fromList [1..10]) (S.fromList [1,3,5])
+  st <- initSubset (S.fromList [1..100]) (S.fromList [1,3,5,11,17,19,29,37,53,67])
   let (a,w) = run st
---  mapM_ putStrLn w
+  mapM_ putStrLn w
   return a
 
 run st = runWriter.evalStateT (mad (S.fromList [])) $ st
 
 mad :: S.Set Int -> Subset Int (M Int) [(Int,Double)]
 mad a = do
-  dss <- sequence (replicate 10 (improve a))
+  dss <- sequence (replicate 1 (improve a))
   return.rsortOn snd.M.toList.foldl' (M.unionWith (+)) M.empty $ dss
 
 initSubset :: S.Set Int -> S.Set Int -> IO (Info Int (M Int))
@@ -48,7 +48,7 @@ initSubset iden tar = do
   gen <- newStdGen
   gen2 <- newStdGen
   let rs = randomRs (False,True) gen
-      ns = map (<=0.5) $ randomRs (0,1.0::Double) gen
+      ns = map (<=0.6) $ randomRs (0,1.0::Double) gen
   return $ Info iden tar M.empty rs ns
 
 type Subset a b = StateT (Info a b) (Writer [String])
