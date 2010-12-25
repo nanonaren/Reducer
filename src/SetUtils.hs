@@ -1,5 +1,6 @@
 module SetUtils
     (
+      randCoprimeFactors
     ) where
 
 import Data.List (partition)
