@@ -28,6 +28,7 @@ data Info u a b = Info
     , userData :: u
     }
 
+run :: SetFinder u a b r -> Info u a b -> r
 run m = fst.fst.runWriter.runStateT m
 
 create uData uSam uIso elems = do

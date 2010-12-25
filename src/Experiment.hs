@@ -5,6 +5,7 @@ module Main
     ) where
 
 import ChineseRem (divisorSearch)
+import ChineseRem.Set (run)
 import ChineseRem.IndepSet
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -53,8 +54,8 @@ main = do
             , rands = randomRs (False,True) gen2
             , sampleTarget = S.fromList $ take (targetSize options) [1..]
             }
-      st = create exp sampler (take (size options) [1..])
-  return ()
+  st <- create exp sampler (take (size options) [1..])
+  putStrLn.show.run (divisorSearch (S.fromList [])) $ st
 
 sampler :: Exp -> S.Set Int -> S.Set Int -> (Exp,MDist Int)
 sampler expData idn a =
