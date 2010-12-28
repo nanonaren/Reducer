@@ -11,27 +11,25 @@ module ChineseRem.Set
 import ChineseRem
 import SetUtils (randCoprimeFactors)
 import Control.Monad.State
-import Control.Monad.Writer
 import qualified Data.Set as S
 import qualified Data.Map as M
 import System.Random
 
-type SetFinder u a b = StateT (Info u a b) (Writer [String])
+type SetFinder m a b = StateT (Info m a b) m
 
-data Info u a b = Info
+data Info m a b = Info
     {
       iden :: S.Set a
     , rands :: [Bool]
     , cache :: M.Map (S.Set a) b
-    , uSample :: u -> S.Set a -> S.Set a -> (u,b)
-    , uIsomorph :: u -> (S.Set a,b) -> (S.Set a,b) -> (u,b)
-    , userData :: u
+    , uSample :: S.Set a -> S.Set a -> m b
+    , uIsomorph :: (S.Set a,b) -> (S.Set a,b) -> m b
     }
 
-run :: SetFinder u a b r -> Info u a b -> r
-run m = fst.fst.runWriter.runStateT m
+run :: Monad m => SetFinder m a b r -> Info m a b -> m r
+run m = evalStateT m
 
-create uData uSam uIso elems = do
+create uSam uIso elems = do
   gen <- newStdGen
   let inf = Info
             {
@@ -40,11 +38,10 @@ create uData uSam uIso elems = do
             , cache = M.empty
             , uSample = uSam
             , uIsomorph = uIso
-            , userData = uData
             }
   return inf
 
-instance Ord a => Rem (S.Set a) b (SetFinder u a b) where
+instance (Monad m,Ord a) => Rem (S.Set a) b (SetFinder m a b) where
     coprimeFactors div = do
       rs <- gets rands
       e <- gets iden
@@ -58,12 +55,10 @@ instance Ord a => Rem (S.Set a) b (SetFinder u a b) where
         Just ps -> return ps
         Nothing ->
             do
-              u <- gets userData
               f <- gets uSample
               idn <- gets iden
-              let (u',ps) = f u idn a
+              ps <- lift $ f idn a
               addToCache a ps
-              modify (\s -> s{userData=u'})
               return ps
         where fetch x = gets (M.lookup x.cache)
               addToCache x ps = do
@@ -73,8 +68,6 @@ instance Ord a => Rem (S.Set a) b (SetFinder u a b) where
     isomorph ma mb = do
       a <- ma
       b <- mb
-      u <- gets userData
       f <- gets uIsomorph
-      let (u',res) = f u a b
-      modify (\s -> s{userData=u'})
+      res <- lift $ f a b
       return res

@@ -8,6 +8,8 @@ import ChineseRem (divisorSearch)
 import ChineseRem.Set (run)
 import ChineseRem.IndepSet
 import ListUtils (rsortOn)
+
+import Control.Monad.State
 import Data.List (foldl')
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -48,6 +50,8 @@ data Exp = Exp
 instance Reserved Int where
     reserved = 0
 
+type St = State Exp
+
 main = do
   options <- cmdArgs opts
   gen <- newStdGen
@@ -58,8 +62,8 @@ main = do
             , sampleTarget = target
             }
       target = S.fromList $ take (targetSize options) [1..]
-  st <- create exp sampler (take (size options) [1..])
-  let res = run (searchSet (reps options)) $ st
+  st <- create sampler (take (size options) [1..])
+  let res = flip evalState exp.run (searchSet (reps options)) $ st
   printResults target res
 
 searchSet n = do
@@ -77,29 +81,25 @@ printResults expected actual = do
          \Number of extra elements: %i\n"
          missing extra
 
-sampler :: Exp -> S.Set Int -> S.Set Int -> (Exp,MDist Int)
-sampler expData idn a =
-  let target = sampleTarget expData
-      rem = head.S.toList.S.difference idn $ a
+sampler :: S.Set Int -> S.Set Int -> St (MDist Int)
+sampler idn a = do
+  target <- gets sampleTarget
+  let rem = head.S.toList.S.difference idn $ a
       remRequired = S.member rem target
       probs = if not remRequired then [(reserved,0.99),(rem,0.01)]
               else [(reserved,0.01),(rem,0.99)]
---              else if zeroR then [(reserved,bothProb),(rem,1-bothProb)]
---              else [(reserved,0),(rem,1)]
---      tsize = fromIntegral.S.size $ target
---      bothProb = (tsize - 1) / tsize
-  in noisify expData (M.fromList probs)
+  noisify (M.fromList probs)
 
-noisify dat ps =
-  let (p:_,ts) = splitAt 1.noises $ dat
-      (u:_,rs) = splitAt 1.rands $ dat
-      dat' = dat{rands=rs,noises=ts}
-  in if p == True
-     then (dat',ps)
-     else
-         let ans = M.fromList.uncurry zip.fmap (switch u).
-                   unzip.M.toList $ ps
-         in (dat',ans)
+noisify ps = do
+  (p:_,ts) <- gets (splitAt 1.noises)
+  (u:_,rs) <- gets (splitAt 1.rands)
+  modify (\s -> s{rands=rs,noises=ts})
+  return $ if p == True
+           then ps
+           else
+               let ans = M.fromList.uncurry zip.fmap (switch u).
+                         unzip.M.toList $ ps
+               in ans
 
 switch True (0.99:0.01:_) = [0.4,0.6]
 switch False (0.99:0.01:_) = [0.4,0.6]
