@@ -80,12 +80,14 @@ printResults expected actual = do
 sampler :: Exp -> S.Set Int -> S.Set Int -> (Exp,MDist Int)
 sampler expData idn a =
   let target = sampleTarget expData
-      extra = S.toList $ target `S.difference` a
       rem = head.S.toList.S.difference idn $ a
-      zeroR = S.size (a `S.intersection` target) > 0
-      probs = if null extra then [(reserved,1),(rem,0)]
-              else if zeroR then [(reserved,0.5),(rem,0.5)]
-                               else [(reserved,0),(rem,1)]
+      remRequired = S.member rem target
+      probs = if not remRequired then [(reserved,0.99),(rem,0.01)]
+              else [(reserved,0.01),(rem,0.99)]
+--              else if zeroR then [(reserved,bothProb),(rem,1-bothProb)]
+--              else [(reserved,0),(rem,1)]
+--      tsize = fromIntegral.S.size $ target
+--      bothProb = (tsize - 1) / tsize
   in noisify expData (M.fromList probs)
 
 noisify dat ps =
@@ -99,10 +101,7 @@ noisify dat ps =
                    unzip.M.toList $ ps
          in (dat',ans)
 
-switch True (1:0:_) = [0.5,0.5]
-switch False (1:0:_) = [0.5,0.5]
-switch True (0:1:_) = [0.5,0.5]
-switch False (0:1:_) = [0.5,0.5]
-switch True (0.5:0.5:_) = [0.7,0.3]
-switch False (0.5:0.5:_) = [0.3,0.7]
-switch _ _ = error "MADNESS"
+switch True (0.99:0.01:_) = [0.4,0.6]
+switch False (0.99:0.01:_) = [0.4,0.6]
+switch True _ = [0.6,0.4]
+switch False _ = [0.6,0.4]
