@@ -11,6 +11,7 @@ import qualified ChineseRem.Set as C
 import ContainerUtils (normalize)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import Data.List
 
 import Test.Framework (defaultMain,testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
@@ -21,18 +22,12 @@ type MDist a = M.Map a Double
 class Reserved a where
     reserved :: a
 
---instance Reserved Int where
---    reserved = 0
-
 type SetFinderIndep u a = C.SetFinder u a (MDist a)
 
 isomorph :: (Ord a,Reserved a) => (S.Set a,MDist a) -> (S.Set a,MDist a) -> MDist a
 isomorph (a,da) (b,db) =
   let zeroA = getZero da
       zeroB = getZero db
---      da' = M.map (zeroB*) da
---      db' = M.map (zeroA*) db
---      final = M.insert reserved (zeroA*zeroB) (M.union da' db')
       final = normalize $ M.insert reserved (zeroA*zeroB) (M.union da db)
   in final
 
@@ -43,13 +38,3 @@ getZero m =
 
 create uData uSam elems = C.create uData uSam iso elems
     where iso u x y = (u,isomorph x y)
-{-
-tests =
-    [
-     testGroup "Isomorph Tests"
-       [
-        testProperty "isomorph" prop_isomorph
-       ]
-    ]
--}
---prop_isomorph =
