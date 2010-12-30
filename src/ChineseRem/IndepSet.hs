@@ -21,6 +21,9 @@ type MDist a = M.Map a Double
 class Reserved a where
     reserved :: a
 
+--instance Reserved Int where
+--    reserved = 0
+
 type SetFinderIndep m u a = C.SetFinder m u a (MDist a)
 
 isomorph :: (Monad m,Ord a,Reserved a) => (S.Set a,MDist a) ->
