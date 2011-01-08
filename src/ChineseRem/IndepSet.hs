@@ -29,10 +29,13 @@ type SetFinderIndep m u a = C.SetFinder m u a (MDist a)
 isomorph :: (Monad m,Ord a,Reserved a) => (S.Set a,MDist a) ->
             (S.Set a,MDist a) -> m (MDist a)
 isomorph (a,da) (b,db) = do
+  return (combine da db)
+{-
   let zeroA = getZero da
       zeroB = getZero db
       final = normalize $ M.insert reserved (zeroA*zeroB) (M.union da db)
   return final
+-}
 
 combine :: Ord a => MDist a -> MDist a -> MDist a
 combine a = M.map (/2).M.unionWith (+) a

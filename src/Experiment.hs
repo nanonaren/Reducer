@@ -89,7 +89,8 @@ sampler idn a = do
   let rems = S.difference idn $ a
       remRequired = (>0).S.size.S.intersection rems $ target
       remList = S.toList rems
-      shared x = x/fromIntegral (S.size rems)
+      sharedRem x = x/fromIntegral (S.size rems)
+      sharedCom x = x/fromIntegral (S.size com)
       probs = if not remRequired
                then [(reserved,0.9)] ++ map (,shared 0.1) remList
                else [(reserved,0.1)] ++ map (,shared 0.9) remList
