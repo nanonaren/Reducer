@@ -4,7 +4,7 @@ module Main
       main
     ) where
 
-import ChineseRem (divisorSearch)
+import ChineseRem (divisorSearch2)
 import ChineseRem.Set (run)
 import ChineseRem.IndepSet
 import ListUtils (rsortOn)
@@ -69,7 +69,7 @@ main = do
   printResults target res
 
 searchSet n = do
-  dss <- sequence (replicate n $ divisorSearch (S.fromList []))
+  dss <- sequence (replicate n $ divisorSearch2 (S.fromList []))
   return.foldl' (M.unionWith (+)) M.empty $ dss
 
 printResults expected actual = do
@@ -89,10 +89,10 @@ sampler idn a = do
   let rems = S.difference idn $ a
       remRequired = (>0).S.size.S.intersection rems $ target
       remList = S.toList rems
-      shared = 1/fromIntegral (S.size rems)
+      shared x = x/fromIntegral (S.size rems)
       probs = if not remRequired
-               then [(reserved,1)] ++ map (,0) remList
-               else [(reserved,0)] ++ map (,shared) remList
+               then [(reserved,0.9)] ++ map (,shared 0.1) remList
+               else [(reserved,0.1)] ++ map (,shared 0.9) remList
   noisify (M.fromList probs)
 
 noisify ps = do

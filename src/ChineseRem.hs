@@ -3,6 +3,7 @@ module ChineseRem
     (
       Rem (..)
     , divisorSearch
+    , divisorSearch2
     ) where
 
 import Control.Monad
@@ -33,8 +34,8 @@ divisorSearch2 a = do
   case facs of
     Nothing -> sample a
     Just (x,y) -> do
-              b <- liftM (x,) (divisorSearch x) `isomorph`
-                   liftM (y,) (divisorSearch y)
+              b <- liftM (x,) (divisorSearch2 x) `isomorph`
+                   liftM (y,) (divisorSearch2 y)
               update a b
 
 -- eta, depth -> eta
