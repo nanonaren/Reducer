@@ -34,9 +34,12 @@ isomorph (a,da) (b,db) = do
       final = normalize $ M.insert reserved (zeroA*zeroB) (M.union da db)
   return final
 
+combine :: Ord a => MDist a -> MDist a -> MDist a
+combine a = M.map (/2).M.unionWith (+) a
+
 getZero m =
     case M.lookup reserved m of
       Nothing -> 0
       Just x -> x
 
-create uSam elems = C.create uSam isomorph elems
+create uSam ulvl elems = C.create uSam isomorph combine ulvl elems

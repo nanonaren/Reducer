@@ -15,6 +15,7 @@ class Monad m => Rem a b m | m -> a b where
     coprimeFactors :: a -> m (Maybe (a,a))
     sample :: a -> m b
     isomorph :: m (a,b) -> m (a,b) -> m b
+    update :: a -> b -> m b
 
 
 --THE MAIN ALGORITHM--
@@ -23,8 +24,18 @@ divisorSearch a = do
   facs <- coprimeFactors a
   case facs of
     Nothing -> sample a
-    Just (x,y) -> liftM (x,) (divisorSearch x) `isomorph` liftM (y,) (divisorSearch y)
+    Just (x,y) -> liftM (x,) (divisorSearch x) `isomorph`
+                  liftM (y,) (divisorSearch y)
 
+divisorSearch2 :: (Rem a b m) => a -> m b
+divisorSearch2 a = do
+  facs <- coprimeFactors a
+  case facs of
+    Nothing -> sample a
+    Just (x,y) -> do
+              b <- liftM (x,) (divisorSearch x) `isomorph`
+                   liftM (y,) (divisorSearch y)
+              update a b
 
 -- eta, depth -> eta
 eta :: Double -> Int -> Double

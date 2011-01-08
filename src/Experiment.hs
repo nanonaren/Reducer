@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable,TupleSections #-}
 module Main
     (
       main
@@ -27,7 +27,8 @@ data Options = Options
       size :: Int,
       targetSize :: Int,
       noise :: Double,
-      reps :: Int
+      reps :: Int,
+      sampleLevel :: Int
     } deriving (Show,Data,Typeable)
 
 opts = Options
@@ -35,7 +36,8 @@ opts = Options
     size = def &= help "Number of elements in problem set (>0)" &= typ "NUM",
     targetSize = def &= help "Number of elements (>0) to place in target" &= typ "NUM",
     noise = def &= help "Probability of noise in sample" &= typ "NUM",
-    reps = def &= help "Number of repetitions"
+    reps = def &= help "Number of repetitions",
+    sampleLevel = def &= help "Number of levels (from bottom) to sample" &= typ "NUM"
   } &= program "experiment"
     &= summary "Experiment with finding subsets"
 
@@ -62,7 +64,7 @@ main = do
             , sampleTarget = target
             }
       target = S.fromList $ take (targetSize options) [1..]
-  st <- create sampler (take (size options) [1..])
+  st <- create sampler (sampleLevel options) (take (size options) [1..])
   let res = flip evalState exp.run (searchSet (reps options)) $ st
   printResults target res
 
@@ -84,10 +86,13 @@ printResults expected actual = do
 sampler :: S.Set Int -> S.Set Int -> St (MDist Int)
 sampler idn a = do
   target <- gets sampleTarget
-  let rem = head.S.toList.S.difference idn $ a
-      remRequired = S.member rem target
-      probs = if not remRequired then [(reserved,0.99),(rem,0.01)]
-              else [(reserved,0.01),(rem,0.99)]
+  let rems = S.difference idn $ a
+      remRequired = (>0).S.size.S.intersection rems $ target
+      remList = S.toList rems
+      shared = 1/fromIntegral (S.size rems)
+      probs = if not remRequired
+               then [(reserved,1)] ++ map (,0) remList
+               else [(reserved,0)] ++ map (,shared) remList
   noisify (M.fromList probs)
 
 noisify ps = do
