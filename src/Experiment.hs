@@ -86,15 +86,21 @@ printResults expected actual = do
 sampler :: S.Set Int -> S.Set Int -> St (MDist Int)
 sampler idn a = do
   target <- gets sampleTarget
-  let rems = S.difference idn $ a
-      remRequired = (>0).S.size.S.intersection rems $ target
+  let rems = S.difference idn a
       remList = S.toList rems
-      sharedRem x = x/fromIntegral (S.size rems)
-      sharedCom x = x/fromIntegral (S.size com)
-      probs = if not remRequired
-               then [(reserved,0.9)] ++ map (,shared 0.1) remList
-               else [(reserved,0.1)] ++ map (,shared 0.9) remList
+      tsize = fromIntegral.S.size $ target
+      (p,divProbs) = aprobs target a
+      shared = (1-p)/fromIntegral (S.size rems)
+      probs = divProbs ++ map (,shared) remList
   noisify (M.fromList probs)
+
+aprobs target a = (p,map f.S.toList $ a)
+    where tsize = fromIntegral.S.size $ target
+          p = interSize/tsize
+          inter = S.intersection target $ a
+          interSize = fromIntegral (S.size inter)
+          shared = p / interSize
+          f x = if S.member x inter then (x,shared) else (x,0)
 
 noisify ps = do
   (p:_,ts) <- gets (splitAt 1.noises)
