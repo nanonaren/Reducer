@@ -99,8 +99,10 @@ aprobs target a = (p,map f.S.toList $ a)
           p = interSize/tsize
           inter = S.intersection target $ a
           interSize = fromIntegral (S.size inter)
-          shared = p / interSize
-          f x = if S.member x inter then (x,shared) else (x,0)
+--          shared = p / interSize
+          shared = p / fromIntegral (S.size a)
+--          f x = if S.member x inter then (x,shared) else (x,0)
+          f x = (x,shared)
 
 noisify ps = do
   (p:_,ts) <- gets (splitAt 1.noises)
