@@ -8,6 +8,7 @@ import ChineseRem (divisorSearch2)
 import ChineseRem.Set (run)
 import ChineseRem.IndepSet
 import ListUtils (rsortOn)
+import RandUtils
 
 import Control.Monad.State
 import Data.List (foldl')
@@ -45,7 +46,7 @@ opts = Options
 data Exp = Exp
     {
       noises :: [Bool]
-    , rands :: [Bool]
+    , rands :: [Double]
     , sampleTarget :: S.Set Int
     }
 
@@ -60,7 +61,7 @@ main = do
   gen2 <- newStdGen
   let exp = Exp {
               noises = map (<=(1-noise options)) $ randomRs (0,1.0::Double) gen
-            , rands = randomRs (False,True) gen2
+            , rands = randomRs (0,1.0) gen2
             , sampleTarget = target
             }
       target = S.fromList $ take (targetSize options) [1..]
@@ -74,7 +75,7 @@ searchSet n = do
 
 printResults expected actual = do
   putStrLn.show $ expected
-  putStrLn.show $ actual
+  putStrLn.show.rsortOn snd.M.toList $ actual
   let actual' = S.fromList.map fst.take (S.size expected).rsortOn snd.
                 M.toList.M.delete reserved $ actual
       missing = S.size.S.difference expected $ actual'
@@ -89,31 +90,29 @@ sampler idn a = do
   let rems = S.difference idn a
       remList = S.toList rems
       tsize = fromIntegral.S.size $ target
-      (p,divProbs) = aprobs target a
-      shared = (1-p)/fromIntegral (S.size rems)
+  (p,divProbs) <- aprobs (S.size idn) target a
+  let shared = (1-p)/fromIntegral (S.size rems)
       probs = divProbs ++ map (,shared) remList
-  noisify (M.fromList probs)
+  return (M.fromList probs)
 
-aprobs target a = (p,map f.S.toList $ a)
-    where tsize = fromIntegral.S.size $ target
-          p = interSize/tsize
-          inter = S.intersection target $ a
-          interSize = fromIntegral (S.size inter)
---          shared = p / interSize
-          shared = p / fromIntegral (S.size a)
---          f x = if S.member x inter then (x,shared) else (x,0)
-          f x = (x,shared)
-
-noisify ps = do
-  (p:_,ts) <- gets (splitAt 1.noises)
+aprobs sz target a = do
+  (n:_,ts) <- gets (splitAt 1.noises)
   (u:_,rs) <- gets (splitAt 1.rands)
+  let p = (fromIntegral $ if n then interSize
+                          else jitter u interSize 1 0 sz) / tsize
+      shared = p / fromIntegral (S.size a)
+      f x = (x,shared)
   modify (\s -> s{rands=rs,noises=ts})
-  return $ if p == True
-           then ps
-           else
-               let ans = M.fromList.uncurry zip.fmap (switch u).
-                         unzip.M.toList $ ps
-               in ans
+  return (p,map f.S.toList $ a)
+    where tsize = fromIntegral.S.size $ target
+          inter = S.intersection target $ a
+          interSize = S.size inter
+--          shared = p / interSize
+--          f x = if S.member x inter then (x,shared) else (x,0)          
+
+jitter p actual range minV maxV = chooseInt p minBound maxBound
+    where minBound = max minV (actual - range)
+          maxBound = min maxV (actual + range)
 
 switch True (0.99:0.01:_) = [0.4,0.6]
 switch False (0.99:0.01:_) = [0.4,0.6]

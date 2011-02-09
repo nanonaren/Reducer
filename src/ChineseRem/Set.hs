@@ -21,7 +21,7 @@ type SetFinder m a b = StateT (Info m a b) m
 data Info m a b = Info
     {
       iden :: S.Set a
-    , rands :: [Bool]
+    , rands :: [Double]
     , cache :: M.Map (S.Set a) b
     , updateLevels :: Int
     , uSample :: S.Set a -> S.Set a -> m b
@@ -37,7 +37,7 @@ create uSam uIso comb ulvl elems = do
   let inf = Info
             {
               iden = S.fromList elems
-            , rands = randomRs (False,True) gen
+            , rands = randomRs (0,1.0) gen
             , cache = M.empty
             , updateLevels = ulvl
             , uSample = uSam

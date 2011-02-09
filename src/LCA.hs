@@ -59,7 +59,7 @@ opts = Options
   , dataFile = "/home/narens/work/lca/data/allnodes.tab"
   , nnlsPath = "/home/narens/Downloads/nnls"
   , rscriptPath = "/usr/bin/Rscript"
-  , rootNode = "7063"
+  , rootNode = "10158"
   , delta = 0.15
   , mustInclude = "/home/narens/work/lca/data/76names.tab"
   , numRandomNodes = 0
@@ -72,7 +72,7 @@ instance Reserved Int where
 main = do
   st <- execStateT (setupR >> setupNodes) lca
   finder <- create sampler 1 (M.elems.M.delete (rootNode opts).names $ st)
-  res <- flip evalStateT st.run (doIt 10) $ finder
+  res <- flip evalStateT st.run (doIt 1) $ finder
   putStrLn.show.rsortOn snd.M.toList $ res
 
 doIt n = do
@@ -89,7 +89,9 @@ sampler iden a = do
       remList = S.toList rem
       p = fromIntegral fits/mfits
       shared = (1-p) / fromIntegral (S.size rem)
-      dist = M.fromList $ fromCoeffs a p cs ++ map (,shared) remList
+      ashared = p / fromIntegral (S.size a)
+      dist = M.fromList $ map (,ashared) (S.toList a) ++ map (,shared) remList
+--      dist = M.fromList $ fromCoeffs a p cs ++ map (,shared) remList
   liftIO.putStrLn.show $ "Remainder " ++ show remList ++ " got "
                          ++ show shared ++ " FITS: " ++ show fits
   --liftIO.putStrLn.show $ dist
