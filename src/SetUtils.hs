@@ -2,7 +2,7 @@
 module SetUtils
     (
       randCoprimeFactors
---      randPartitions
+    , randPartitions
     ) where
 
 import Control.Monad.Random
@@ -27,25 +27,26 @@ randPartition n s = do
   binMap <- mapM (\x -> getRandomR (1,n) >>= \r -> return (r,[x])).S.toList $ s
   return.map S.fromList.M.elems.M.fromListWith (++) $ binMap
 
-randCoprimeFactors :: Ord a => [Double] -> S.Set a -> S.Set a ->
-                      ([Double],Maybe (S.Set a,S.Set a))
-randCoprimeFactors ps iden d
-    | diffsz == 1 = (ps,Nothing)
-    | otherwise = (ps',Just (p1,p2))
-    where diff = S.difference iden d
-          diffsz = fromIntegral $ S.size diff
-          (r:rands,ps') = splitAt (S.size diff+1) ps
-          takeSize = ceiling (r*diffsz)
-          bools = map ((<=takeSize).floor.(*diffsz)) rands
-          (pa,pb) = partition' fst (zip bools (S.toList diff))
-          p1 = S.union d $ S.fromList $ map snd pa
-          p2 = S.union d $ S.fromList $ map snd pb
-          partition' f xs
-              | null p1 = ([head p2],tail p2)
-              | null p2 = (tail p1,[head p1])
-              | otherwise = (p1,p2)
-              where (p1,p2) = partition f xs
+randCoprimeFactors :: (RandomGen g,Ord a) =>
+                      S.Set a
+                   -> S.Set a
+                   -> Rand g (Maybe (S.Set a,S.Set a))
+randCoprimeFactors iden d = do
+  let diff = S.difference iden d
+  case S.size diff of
+    1 -> return Nothing
+    _ -> do
+      parts <- randPartition 2 diff
+      return (Just $ addDiv $ balance parts)
+    where balance (s1:s2:[])
+              | S.size s1 == 0 = moveOne s1 s2
+              | S.size s2 == 0 = moveOne s2 s1
+              | otherwise = (s1,s2)
+          moveOne s1 s2 = let (a,s2') = S.deleteFindMin s2
+                          in (S.insert a s1,s2')
+          addDiv (a,b) = (S.union d a,S.union d b)
 
+{-
 tests =
     [
      testGroup "Coprime tests"
@@ -70,3 +71,4 @@ prop_coprime_empty ps =
         d = S.deleteMin iden
         (ps',Nothing) = randCoprimeFactors ps iden d
     in ps == ps'
+-}
