@@ -2,7 +2,7 @@
 module SetUtils
     (
       randCoprimeFactors
-    , randPartitions
+    , randPartition
     ) where
 
 import Control.Monad.Random
@@ -18,9 +18,6 @@ import Test.QuickCheck
 
 hashSet :: Show a => S.Set a -> Int32
 hashSet = hashString.concat.map show.S.toList
-
-randPartitions :: (RandomGen g,Ord a) => Int -> S.Set a -> Rand g [[S.Set a]]
-randPartitions n s = sequence $ repeat (randPartition n s)
 
 randPartition :: (RandomGen g,Ord a) => Int -> S.Set a -> Rand g [S.Set a]
 randPartition n s = do
@@ -38,10 +35,9 @@ randCoprimeFactors iden d = do
     _ -> do
       parts <- randPartition 2 diff
       return (Just $ addDiv $ balance parts)
-    where balance (s1:s2:[])
-              | S.size s1 == 0 = moveOne s1 s2
-              | S.size s2 == 0 = moveOne s2 s1
-              | otherwise = (s1,s2)
+    where balance ps
+              | length ps == 1 = moveOne S.empty (head ps)
+              | otherwise = (head ps,(head.tail) ps)
           moveOne s1 s2 = let (a,s2') = S.deleteFindMin s2
                           in (S.insert a s1,s2')
           addDiv (a,b) = (S.union d a,S.union d b)
