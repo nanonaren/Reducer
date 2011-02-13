@@ -1,14 +1,32 @@
+{-# LANGUAGE TupleSections #-}
 module SetUtils
     (
       randCoprimeFactors
     ) where
 
-import Data.List (partition)
+import Data.Int
+import Data.List (partition,find)
 import qualified Data.Set as S
+import qualified Data.Map as M
+import Data.HashTable (hashString)
+import Data.Maybe (fromJust)
 
 import Test.Framework (defaultMain,testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
+
+hashSet :: Show a => S.Set a -> Int32
+hashSet = hashString.concat.map show.S.toList
+
+randPartition :: Ord a => [Double] -> Int -> S.Set a -> ([S.Set a],[Double])
+randPartition ps n s = (,ps').map S.fromList.M.elems.
+                       M.fromListWith (++).zip bins.map (:[]).S.toList $ s
+    where (bins,ps') = let (lhs,rhs) = splitAt (S.size s) ps
+                       in (map toBin lhs,rhs)
+          binSize = 1.0/(fromIntegral n)
+          binMap = map (\x -> (x,((binSize-1) * fromIntegral x,
+                                binSize * fromIntegral x))) [1..n]
+          toBin d = fst.fromJust.find (\(b,(l,r)) -> d>=l && d<r) $ binMap
 
 randCoprimeFactors :: Ord a => [Double] -> S.Set a -> S.Set a ->
                       ([Double],Maybe (S.Set a,S.Set a))
