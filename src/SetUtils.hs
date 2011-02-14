@@ -8,6 +8,7 @@ module SetUtils
 import Control.Monad.Random
 import Data.Int
 import Data.List (partition)
+import ListUtils (sortOn)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.HashTable (hashString)
@@ -18,7 +19,12 @@ import Test.QuickCheck
 
 hashSet :: Show a => S.Set a -> Int32
 hashSet = hashString.concat.map show.S.toList
-
+{-
+randPermutation :: Int -> [a] -> Rand g [a]
+randPermutation n xs = do
+  xs' <- mapM (\x -> getRandomR (1,n) >>= \r -> return (x,r)) xs
+  return $ sortOn snd bxs'
+-}
 randPartition :: (RandomGen g,Ord a) => Int -> S.Set a -> Rand g [S.Set a]
 randPartition n s = do
   binMap <- mapM (\x -> getRandomR (1,n) >>= \r -> return (r,[x])).S.toList $ s
