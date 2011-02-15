@@ -8,7 +8,7 @@ module DimensionLearner
 
 import SetUtils
 import MapUtils (unionWithMonoid)
-import ListUtils (chooseSortedPairs,printList)
+import ListUtils (chooseSortedPairs,printList,rsortOn)
 import Data.List (maximumBy,minimumBy)
 import Data.Function (on)
 import Control.Monad.Random
@@ -51,8 +51,11 @@ data Info a = Info
 
 instance Show a => Show (Info a) where
     show (Info dm g r) =
-        "Global Dep Avg: " ++ show g ++ "\n" ++ showDeps dm
+        "Global Dep Avg: " ++ show g ++ "\n" ++ showRanking r ++ showDeps dm
 --        printList "\n" (M.toList dm)
+
+showRanking m = printList "\n" (rsortOn snd lst) ++ "\n"
+    where lst = M.toList m
 
 showDeps m =
     "Min Dep Value: " ++ show (minimumBy (compare `on` snd) lst) ++ "\n" ++
@@ -99,18 +102,20 @@ subOrchestra s f partw part = do
                 f1w <- liftIO.f $ f1
                 f2w <- liftIO.f $ f2
                 let diff = (1-partw) - ((1-f1w)+(1-f2w))
-                updateDeps (S.difference s f1) (S.difference s f2) diff
+                updateDeps (S.difference s part) (1-partw) (S.difference s f1)
+                           (S.difference s f2) diff
                 -- liftIO.putStrLn $ "DIVISOR: " ++ show part
                 -- liftIO.putStrLn $ "DIVISOR REM WEIGHT: " ++ show (1-partw)
                 -- liftIO.putStrLn $ "F1 REM WEIGHT: " ++ show (1-f1w)
                 -- liftIO.putStrLn $ "F2 REM WEIGHT: " ++ show (1-f2w)
                 -- liftIO.putStrLn.show $ diff
 
-updateDeps :: Ord a => S.Set a -> S.Set a -> Double -> St a ()
-updateDeps r1 r2 w = do
-  T.modify (mappend (Info deps (Avg 1 w) M.empty))
+updateDeps :: Ord a => S.Set a -> Double -> S.Set a -> S.Set a -> Double -> St a ()
+updateDeps r rw r1 r2 w = do
+  T.modify (mappend (Info deps (Avg 1 w) ranks))
     where pairs = chooseSortedPairs (S.toList r1) (S.toList r2)
           deps = M.fromList.map (,Avg 1 w) $ pairs
+          ranks = M.fromList.map (,Avg 1 rw).S.toList $ r
 
 normalizeDeps :: St a ()
 normalizeDeps = do

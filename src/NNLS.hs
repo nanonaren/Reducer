@@ -7,20 +7,36 @@ import DimensionLearner
 import qualified Data.Set as S
 import System.Process (runInteractiveCommand)
 import System.IO
-import Data.List ((\\))
+import Data.Maybe (fromJust)
+import qualified Data.Map as M
 
 main = do
+  fs76 <- get76Features
+  featureMap <- getFeatures
   let maxFits = 197
-      root = 60
-      fs = S.fromList $ [1..76] \\ [root]
+      root = 7063
+      rootln = fromJust $ M.lookup root featureMap
+      fs = S.delete root.S.fromList $ fs76
   (inp,out) <- setupR
-  let f = fmap fst.nnls inp out maxFits root.S.toList
-  inf <- run (orchestra 10 40 fs f)
+  let f = fmap fst.nnls featureMap inp out maxFits rootln.S.toList
+  inf <- run (orchestra 75 1 fs f)
   putStrLn.show $ inf
 
-nnls :: Handle -> Handle -> Double -> Int -> [Int] -> IO (Double,[Double])
-nnls inp out maxFits root xs = do
-  let cmd = nnlscode [1..maxFits] xs root
+getFeatures :: IO (M.Map Int Int)
+getFeatures = do
+  contents <- readFile "../data/allnames.tab"
+  return.M.fromList.flip zip [1..].map (read.head.words).lines $ contents
+
+get76Features :: IO [Int]
+get76Features = do
+  contents <- readFile "../data/76names.tab"
+  return.map (read.head.words).lines $ contents
+
+nnls :: M.Map Int Int -> Handle -> Handle -> Double
+     -> Int -> [Int] -> IO (Double,[Double])
+nnls mp inp out maxFits root xs = do
+  let xs' = map (fromJust.flip M.lookup mp) xs
+      cmd = nnlscode [1..maxFits] xs' root
   hPutStr inp cmd
   ln <- skipStupidLines out
   let ws = words ln
@@ -52,8 +68,8 @@ nnlscode factors children root =
 
 setupR :: IO (Handle,Handle)
 setupR = do
-  let file = "/home/narens/work/lca/data/allnodes.tab"
-      nnlsPath = "/home/narens/Downloads/nnls"
+  let file = "../data/allnodes.tab"
+      nnlsPath = "../data/nnls"
       rscriptPath = "/usr/bin/Rscript"
   (inp,out,_,_) <- runInteractiveCommand (rscriptPath ++ " --vanilla -")
   hSetBuffering inp NoBuffering
