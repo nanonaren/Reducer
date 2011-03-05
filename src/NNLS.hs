@@ -19,13 +19,13 @@ main = do
   (Right cacheList) <- parseCSVFromFile "/home/narens/.cacher"
   let cache = M.fromList.map (\(x:y:_) -> (x,y)).filter ((==2).length) $ cacheList
       maxFits = 197
-      root = 10158
+      root = 7063
       rootln = fromJust $ M.lookup root featureMap
       fs = S.delete root.S.fromList $ fs76
   (inp,out) <- setupR
   let f = fmap fst.nnls cache featureMap inp out maxFits rootln.S.toList
       rem = S.fromList [7101,10798,1154,1166,1072,1169,1056,664,1178,1174,9272,1983,1855,1817,1165,364,2115,1155]
-  inf <- run (orchestra 35 10 fs f rem)
+  inf <- run (orchestra fs f rem)
 --  f (S.fromList [271,1110,364,281,1844,6652,308,1171,7218,693,9272] )
 --  f (S.fromList [1056,1169,7101,1154,1174,664,1171,1817,1855,1166,1072,1165,7083,7303,1983,411])
 --  f (S.fromList [281,1171,1056,7224,9272] )

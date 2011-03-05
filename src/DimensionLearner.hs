@@ -82,14 +82,12 @@ emptyInfo = Info M.empty mempty M.empty
 
 -- |Does stuff
 orchestra :: (Ord a,Show a) =>
-             Int -- ^Number of partitions
-          -> Int -- ^Number of repetitions
-          -> S.Set a -- ^The set of features
+             S.Set a -- ^The set of features
           -> (S.Set a -> IO Double) -- ^The objective function
           -> S.Set a
           -> St a ()
-orchestra np nr s f rem = do
-  base <- liftIO.liftM (\v -> 1-v).f $ s
+orchestra s f rem = do
+  base <- liftIO.f $ s
   let useThis = s --S.difference s rem
   -- 1-PARTITION
   parts <- liftIO.fmap (map (S.difference s.S.fromList)).evalRandIO.
@@ -107,7 +105,7 @@ orchestra np nr s f rem = do
 allTwos base s xs f = do
   liftIO.mapM_ (\(x,xv) -> do
                   v <- f (S.difference s x)
-                  putStrLn (show (S.toList x) ++ " OLD: " ++ show xv ++ " NEW: " ++ show (1-v-base) ++ " COMP: " ++ comp xv (1-v-base))
+                  putStrLn (show (S.toList x) ++ " OLD: " ++ show xv ++ " NEW: " ++ show (base-v) ++ " COMP: " ++ comp xv (base-v))
                ) $ xss
     where xss = map (mapFst S.fromList).nubBy ((==) `on` fst) $
                 [(sort (concat [x,y]),xv+yv) | (x,xv)<-xs,(y,yv)<-xs]
@@ -149,9 +147,9 @@ processPartition base name s ps pws = do
             nest 5 (vcat [cLength,cTotalUncapped,convergenceSeries,allPartOrder])
   liftIO $ putStrLn.render $ doc
   return (map swap nonZeroPs,map swap zeroPs)
-    where ordered = rsortOn fst.zip (map (\v -> 1-v-base) pws).
+    where ordered = rsortOn fst.zip (map (\v -> base-v) pws).
                     map (S.toList.S.difference s) $ ps
-          (nonZeroPs,zeroPs) = partition ((/=0).fst) ordered
+          (nonZeroPs,zeroPs) = partition ((>0).fst) ordered
           allPartOrder = (nameIt "Partition Order"<>).fsep.punctuate comma.
                          map (text.show.snd) $ nonZeroPs
           cLength = (nameIt "Convergence Length" <>).int.sum'.
