@@ -3,19 +3,21 @@ module SetUtils
     (
       randCoprimeFactors
     , randPartition
+    , randFixedPartition
     ) where
 
 import Control.Monad.Random
+import Control.Monad (liftM)
 import Data.Int
 import Data.List (partition)
-import ListUtils (sortOn)
+import ListUtils (sortOn,removeAt)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Data.HashTable (hashString)
 
-import Test.Framework (defaultMain,testGroup)
-import Test.Framework.Providers.QuickCheck2 (testProperty)
-import Test.QuickCheck
+--import Test.Framework (defaultMain,testGroup)
+--import Test.Framework.Providers.QuickCheck2 (testProperty)
+--import Test.QuickCheck
 
 hashSet :: Show a => S.Set a -> Int32
 hashSet = hashString.concat.map show.S.toList
@@ -29,6 +31,25 @@ randPartition :: (RandomGen g,Ord a) => Int -> S.Set a -> Rand g [S.Set a]
 randPartition n s = do
   binMap <- mapM (\x -> getRandomR (1,n) >>= \r -> return (r,[x])).S.toList $ s
   return.map S.fromList.M.elems.M.fromListWith (++) $ binMap
+
+-- |Doc
+randFixedPartition :: RandomGen g => Int -> Int -> [a] -> Rand g [[a]]
+randFixedPartition 0 _ _ = return []
+randFixedPartition len n xs = do
+  (xs',p) <- randPicks len n' xs
+  liftM (p:) $ randFixedPartition (len-n') n xs'
+     where n' = if n > len then len else n
+
+randPicks _ 0 xs = return (xs,[])
+randPicks len num xs = do
+  (r,xs') <- randPick len xs
+  liftM (fmap (r:)) $ randPicks (len-1) (num-1) xs'
+
+randPick len xs = do
+  num <- getRandomR (0,len-1)
+  return.removeAt num $ xs
+
+randAnnotate m = mapM (\x -> m >>= \r -> (r,x))
 
 randCoprimeFactors :: (RandomGen g,Ord a) =>
                       S.Set a
