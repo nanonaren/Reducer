@@ -11,15 +11,17 @@ import Data.Maybe (fromJust)
 import qualified Data.Map as M
 import ListUtils (rsortOn)
 import Text.CSV
+import System.Environment (getArgs)
 
 main = do
+  rootN <- fmap (read.(!!0)) getArgs
   hSetBuffering stdout NoBuffering
   fs76 <- get76Features
   featureMap <- getFeatures
   (Right cacheList) <- parseCSVFromFile "/home/narens/.cacher"
   let cache = M.fromList.map (\(x:y:_) -> (x,y)).filter ((==2).length) $ cacheList
       maxFits = 197
-      root = 7063
+      root = rootN
       rootln = fromJust $ M.lookup root featureMap
       fs = S.delete root.S.fromList $ fs76
   (inp,out) <- setupR

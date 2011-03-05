@@ -10,7 +10,7 @@ import SetUtils
 import MapUtils (unionWithMonoid)
 import ListUtils
 import TupleUtils (swap,mapFst)
-import Data.List (maximumBy,minimumBy,partition,sort,nubBy)
+import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub)
 import Data.Function (on)
 import Control.Monad.Random
 import Control.Monad.State as T
@@ -98,7 +98,10 @@ orchestra s f rem = do
 --  let mini = snd.minimumBy (compare `on` snd) $ nonZeroPs
 --      nonZeroPs' = map (\(a,b) -> (a,b-mini)) nonZeroPs
 --  orch2 s nonZeroPs zeroPs f
---  allTwos (base+mini) s nonZeroPs' f
+  liftIO.putStrLn $ "#####NON-ZEROS#####"
+  allTwos base s nonZeroPs f
+  liftIO.putStrLn $ "#####ZEROS#####"
+  allTwos base s zeroPs f
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
 
@@ -107,8 +110,9 @@ allTwos base s xs f = do
                   v <- f (S.difference s x)
                   putStrLn (show (S.toList x) ++ " OLD: " ++ show xv ++ " NEW: " ++ show (base-v) ++ " COMP: " ++ comp xv (base-v))
                ) $ xss
-    where xss = map (mapFst S.fromList).nubBy ((==) `on` fst) $
-                [(sort (concat [x,y]),xv+yv) | (x,xv)<-xs,(y,yv)<-xs]
+    where xss = map (mapFst S.fromList).filter ((>1).length.fst).
+                nubBy ((==) `on` fst) $
+                [(sort.nub $ (concat [x,y]),xv+yv) | (x,xv)<-xs,(y,yv)<-xs]
 
 comp a b
     | a == b = "old == new"
@@ -145,7 +149,7 @@ processPartition :: (Ord a,Show a) => Double -> String -> S.Set a -> [S.Set a]
 processPartition base name s ps pws = do
   let doc = nameIt name $+$
             nest 5 (vcat [cLength,cTotalUncapped,convergenceSeries,allPartOrder])
-  liftIO $ putStrLn.render $ doc
+  --liftIO $ putStrLn.render $ doc
   return (map swap nonZeroPs,map swap zeroPs)
     where ordered = rsortOn fst.zip (map (\v -> base-v) pws).
                     map (S.toList.S.difference s) $ ps
