@@ -115,7 +115,7 @@ emptyPart = Part S.empty 0 False
 
 concatParts [] = return emptyPart
 concatParts (x:xs) = do
-  let pt = foldl' (<+>) emptyPart xs
+  let pt = concatParts' xs
   x <++> pt
 
 concatParts' :: Ord a => [Part a] -> Part a
@@ -173,10 +173,10 @@ prepareNextLevel xss = do
           collapse = nub.concat.map fst.filter ((==GT).snd)
 
 directPartition ps = do
-  ps1 <- eqClassesM relation ps >>=
-         return.partition ((==1).length) >>= \(lvlParts,others) ->
-         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
-         return (others' ++ map concatParts' (pairUp (concat lvlParts)))
+  ps1 <- eqClassesTM relation ps >>= mapM concatParts
+--         return.partition ((==1).length) >>= \(lvlParts,others) ->
+--         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
+--         return (map concatParts' (pairUp (concat lvlParts)) ++ others')
   liftIO.putStrLn.show $ ps1
     where relation p1 p2 = do
             mergedScore <- fmap score (p1 <++> p2)
