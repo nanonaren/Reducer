@@ -173,11 +173,12 @@ prepareNextLevel xss = do
           collapse = nub.concat.map fst.filter ((==GT).snd)
 
 directPartition ps = do
-  ps1 <- eqClassesTM relation ps >>= mapM concatParts
---         return.partition ((==1).length) >>= \(lvlParts,others) ->
---         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
---         return (map concatParts' (pairUp (concat lvlParts)) ++ others')
-  liftIO.putStrLn.show $ ps1
+  ps' <- eqClassesTM relation ps >>=
+         return.partition ((==1).length) >>= \(lvlParts,others) ->
+         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
+         return (map concatParts' (pairUp (concat lvlParts)) ++ others')
+  liftIO.putStrLn.show.sortParts $ ps'
+  return ps'
     where relation p1 p2 = do
             mergedScore <- fmap score (p1 <++> p2)
             return $ score (p1 <+> p2) < mergedScore
