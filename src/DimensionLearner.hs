@@ -8,7 +8,7 @@ module DimensionLearner
 
 import SetUtils
 import MapUtils (unionWithMonoid)
-import ListUtils
+import NanoUtils.List
 import NanoUtils.Monadic.List
 import TupleUtils (swap,mapFst)
 import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub,foldl')
@@ -64,10 +64,11 @@ data Part a = Part
     {
       part :: S.Set a
     , score :: Double
+    , softClosure :: Bool
     }
 
 instance Show a => Show (Part a) where
-    show (Part p s) = show (S.toList p,s)
+    show (Part p s b) = show (S.toList p,s,b)
 
 showRanking m = printList "\n" (rsortOn snd lst) ++ "\n"
     where lst = M.toList m
@@ -93,16 +94,34 @@ run m = execStateT m emptyInfo
 
 emptyInfo = Info M.empty mempty M.empty undefined undefined undefined
 
-(Part p1 s1) <+> (Part p2 s2) =
-    Part (S.union p1 p2) (s1+s2)
+a@(Part p1 s1 _) <+> b@(Part p2 s2 _)
+    | S.null p1 = b
+    | S.null p2 = a
+    | otherwise = Part (S.union p1 p2) (s1+s2) True
 
-(Part p1 s1) <++> (Part p2 s2) = do
+a@(Part p1 s1 b1) <++> b@(Part p2 s2 b2)
+    | S.null p1 = return b
+    | S.null p2 = return a
+    | otherwise = do
   base <- gets (baseScore_)
   s <- gets (fSet_)
   f <- gets (scoref_)
   let p3 = S.union p1 p2
   s3 <- liftIO.liftM (base-) $ f (S.difference s p3)
-  return (Part p3 s3)
+  let bc = not (not b1 && not b2 && (s1+s2 < s3))
+  return (Part p3 s3 bc)
+
+emptyPart = Part S.empty 0 False
+
+concatParts [] = return emptyPart
+concatParts (x:xs) = do
+  let pt = foldl' (<+>) emptyPart xs
+  x <++> pt
+
+concatParts' :: Ord a => [Part a] -> Part a
+concatParts' = foldl' (<+>) emptyPart
+
+markAsNotSoft (Part p1 s1 _) = Part p1 s1 False
 
 sortParts = rsortOn score
 
@@ -138,9 +157,8 @@ orchestra s f rem = do
   -- liftIO.putStrLn $ "#####ZEROS#####"
   -- xss <- allTwos base s zeroPs f
   -- prepareNextLevel xss
-  let ps = map (\(xs,v) -> Part (S.fromList xs) v) nonZeroPs
-      ps' = map (\(xs,v) -> Part (S.fromList xs) v) zeroPs
-  directPartition ps ps'
+  let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
+  directPartition ps
 
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
@@ -154,10 +172,12 @@ prepareNextLevel xss = do
                                 Just _ -> M.insertWith (++) x [xs] m) m.fst $ xs
           collapse = nub.concat.map fst.filter ((==GT).snd)
 
-directPartition ps ps' = do
-  ps1 <- eqClassesM relation ps
-  ps2 <- eqClassesM relation ps'
-  liftIO.putStrLn.show $ (ps1 ++ ps2)
+directPartition ps = do
+  ps1 <- eqClassesM relation ps >>=
+         return.partition ((==1).length) >>= \(lvlParts,others) ->
+         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
+         return (others' ++ map concatParts' (pairUp (concat lvlParts)))
+  liftIO.putStrLn.show $ ps1
     where relation p1 p2 = do
             mergedScore <- fmap score (p1 <++> p2)
             return $ score (p1 <+> p2) < mergedScore
