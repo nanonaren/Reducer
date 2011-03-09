@@ -12,6 +12,7 @@ import qualified Data.Map as M
 import ListUtils (rsortOn)
 import Text.CSV
 import System.Environment (getArgs)
+import Data.IORef
 
 main = do
   rootN <- fmap (read.(!!0)) getArgs
@@ -24,8 +25,11 @@ main = do
       root = rootN
       rootln = fromJust $ M.lookup root featureMap
       fs = S.delete root.S.fromList $ fs76
+
+  cacheRef <- newIORef cache
+
   (inp,out) <- setupR
-  let f = fmap fst.nnls cache featureMap inp out maxFits rootln.S.toList
+  let f = fmap fst.nnls cacheRef featureMap inp out maxFits rootln.S.toList
       rem = S.fromList [7101,10798,1154,1166,1072,1169,1056,664,1178,1174,9272,1983,1855,1817,1165,364,2115,1155]
   inf <- run (orchestra fs f rem)
 --  f (S.fromList [271,1110,364,281,1844,6652,308,1171,7218,693,9272] )
@@ -51,23 +55,28 @@ get76Features = do
   contents <- readFile "../data/76names.tab"
   return.map (read.head.words).lines $ contents
 
-nnls :: M.Map String String -> M.Map Int Int -> Handle -> Handle -> Double
-     -> Int -> [Int] -> IO (Double,[Double])
-nnls cache mp inp out maxFits root xs = do
+nnls :: (IORef (M.Map String String)) -> M.Map Int Int -> Handle -> Handle
+     -> Double -> Int -> [Int] -> IO (Double,[Double])
+nnls cacheRef mp inp out maxFits root xs = do
+  cache <- readIORef cacheRef
   let xs' = map (fromJust.flip M.lookup mp) xs
       cmd = nnlscode [1..maxFits] xs' root
   ln <- case M.lookup (show root ++ ":" ++ show xs') cache of
     Nothing -> do
       hPutStr inp cmd
-      l <- skipStupidLines out
-      appendFile "/home/narens/.cacher" (printCSV [[show root ++ ":" ++ show xs',l]]++ "\n")
-      return l
+      let key = show root ++ ":" ++ show xs'
+      value <- skipStupidLines out
+      appendFile "/home/narens/.cacher" (printCSV [[key,value]]++ "\n")
+      addToCache cacheRef key value
+      return value
     Just v -> return v
   let ws = words ln
       numFits = read.head $ ws
       coeffs = map read.tail $ ws
 --  putStrLn.show $ (numFits,coeffs)
   return (numFits,coeffs)
+
+addToCache cacheRef key value = modifyIORef cacheRef (M.insert key value)
 
 nnlscode factors children root =
     "parent <- t(m[" ++ show root ++ ",])[c(" ++ toRarr factors ++ "),]\n" ++

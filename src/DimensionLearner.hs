@@ -9,8 +9,9 @@ module DimensionLearner
 import SetUtils
 import MapUtils (unionWithMonoid)
 import ListUtils
+import NanoUtils.Monadic.List
 import TupleUtils (swap,mapFst)
-import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub)
+import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub,foldl')
 import Data.Function (on)
 import Control.Monad.Random
 import Control.Monad.State as T
@@ -21,7 +22,7 @@ import Data.Monoid
 import Data.Accessor.Template
 import Data.Accessor.Basic
 import System.Random
-import Text.PrettyPrint
+import Text.PrettyPrint hiding ((<+>))
 
 data Avg = Avg
     {
@@ -49,12 +50,24 @@ data Info a = Info
       depMap_ :: M.Map (a,a) Avg
     , globalDepAvg_ :: Avg
     , ranking_ :: M.Map a Avg
+    , baseScore_ :: Double
+    , scoref_ :: S.Set a -> IO Double
+    , fSet_ :: S.Set a
     }
 
 instance Show a => Show (Info a) where
-    show (Info dm g r) =
+    show (Info dm g r _ _ _) =
         "Global Dep Avg: " ++ show g ++ "\n" ++ showRanking r -- ++ showDeps dm
 --        printList "\n" (M.toList dm)
+
+data Part a = Part
+    {
+      part :: S.Set a
+    , score :: Double
+    }
+
+instance Show a => Show (Part a) where
+    show (Part p s) = show (S.toList p,s)
 
 showRanking m = printList "\n" (rsortOn snd lst) ++ "\n"
     where lst = M.toList m
@@ -68,17 +81,36 @@ showDeps m =
 $( deriveAccessors ''Info )
 $( deriveAccessors ''Avg )
 
-instance Ord a => Monoid (Info a) where
-    mempty = Info M.empty mempty M.empty
-    (Info d1 g1 r1) `mappend` (Info d2 g2 r2) =
-        Info (unionWithMonoid d1 d2) (g1 `mappend` g2)
-             (unionWithMonoid r1 r2)
+-- instance Ord a => Monoid (Info a) where
+--     mempty = Info M.empty mempty M.empty undefined undefined 
+--     (Info d1 g1 r1) `mappend` (Info d2 g2 r2) =
+--         Info (unionWithMonoid d1 d2) (g1 `mappend` g2)
+--              (unionWithMonoid r1 r2)
 
 type St a = T.StateT (Info a) IO
 
 run m = execStateT m emptyInfo
 
-emptyInfo = Info M.empty mempty M.empty
+emptyInfo = Info M.empty mempty M.empty undefined undefined undefined
+
+(Part p1 s1) <+> (Part p2 s2) =
+    Part (S.union p1 p2) (s1+s2)
+
+(Part p1 s1) <++> (Part p2 s2) = do
+  base <- gets (baseScore_)
+  s <- gets (fSet_)
+  f <- gets (scoref_)
+  let p3 = S.union p1 p2
+  s3 <- liftIO.liftM (base-) $ f (S.difference s p3)
+  return (Part p3 s3)
+
+sortParts = rsortOn score
+
+stateSetup s f = do
+  base <- liftIO.f $ s
+  T.modify (baseScore^=base)
+  T.modify (scoref^=f)
+  T.modify (fSet^=s)
 
 -- |Does stuff
 orchestra :: (Ord a,Show a) =>
@@ -87,7 +119,8 @@ orchestra :: (Ord a,Show a) =>
           -> S.Set a
           -> St a ()
 orchestra s f rem = do
-  base <- liftIO.f $ s
+  stateSetup s f
+  base <- gets (baseScore_)
   let useThis = s --S.difference s rem
   -- 1-PARTITION
   parts <- liftIO.fmap (map (S.difference s.S.fromList)).evalRandIO.
@@ -98,17 +131,42 @@ orchestra s f rem = do
 --  let mini = snd.minimumBy (compare `on` snd) $ nonZeroPs
 --      nonZeroPs' = map (\(a,b) -> (a,b-mini)) nonZeroPs
 --  orch2 s nonZeroPs zeroPs f
-  liftIO.putStrLn $ "#####NON-ZEROS#####"
-  allTwos base s nonZeroPs f
-  liftIO.putStrLn $ "#####ZEROS#####"
-  allTwos base s zeroPs f
+  -- liftIO.putStrLn $ "#####NON-ZEROS#####"
+  -- xss <- allTwos base s nonZeroPs f
+  -- prepareNextLevel xss
+
+  -- liftIO.putStrLn $ "#####ZEROS#####"
+  -- xss <- allTwos base s zeroPs f
+  -- prepareNextLevel xss
+  let ps = map (\(xs,v) -> Part (S.fromList xs) v) nonZeroPs
+      ps' = map (\(xs,v) -> Part (S.fromList xs) v) zeroPs
+  directPartition ps ps'
+
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
 
+prepareNextLevel xss = do
+  let mp = foldl' arrange M.empty xss
+  liftIO.putStrLn.printList "\n".M.toList.M.map collapse $ mp
+    where arrange m xs =
+              foldl' (\m x -> case M.lookup x m of
+                                Nothing -> M.insert x [xs] m
+                                Just _ -> M.insertWith (++) x [xs] m) m.fst $ xs
+          collapse = nub.concat.map fst.filter ((==GT).snd)
+
+directPartition ps ps' = do
+  ps1 <- eqClassesM relation ps
+  ps2 <- eqClassesM relation ps'
+  liftIO.putStrLn.show $ (ps1 ++ ps2)
+    where relation p1 p2 = do
+            mergedScore <- fmap score (p1 <++> p2)
+            return $ score (p1 <+> p2) < mergedScore
+
 allTwos base s xs f = do
-  liftIO.mapM_ (\(x,xv) -> do
+  liftIO.mapM (\(x,xv) -> do
                   v <- f (S.difference s x)
-                  putStrLn (show (S.toList x) ++ " OLD: " ++ show xv ++ " NEW: " ++ show (base-v) ++ " COMP: " ++ comp xv (base-v))
+                  return (S.toList x,compare xv (base-v))
+--                  when (xv < (base-v)) $ putStrLn (show (S.toList x) ++ " OLD: " ++ show xv ++ " NEW: " ++ show (base-v) ++ " COMP: " ++ comp xv (base-v))
                ) $ xss
     where xss = map (mapFst S.fromList).filter ((>1).length.fst).
                 nubBy ((==) `on` fst) $
@@ -165,10 +223,10 @@ processPartition base name s ps pws = do
                               map (fst) $ nonZeroPs
           nameIt nm = text nm <> colon <> space
 
-subOrchestra :: (Ord a,Show a) => S.Set a -> (S.Set a -> IO Double)
-             -> Double -> S.Set a -> St a ()
-subOrchestra s f partw part = do
-  update (S.difference s part) (1-partw)
+-- subOrchestra :: (Ord a,Show a) => S.Set a -> (S.Set a -> IO Double)
+--              -> Double -> S.Set a -> St a ()
+-- subOrchestra s f partw part = do
+--   update (S.difference s part) (1-partw)
   -- cofacs <- liftIO.evalRandIO $ randCoprimeFactors s part
   -- case cofacs of
   --   Nothing -> return () --liftIO.putStrLn.show $ "No factors to look at"
@@ -184,7 +242,7 @@ subOrchestra s f partw part = do
                 -- liftIO.putStrLn $ "F1 REM WEIGHT: " ++ show (1-f1w)
                 -- liftIO.putStrLn $ "F2 REM WEIGHT: " ++ show (1-f2w)
                 -- liftIO.putStrLn.show $ diff
-
+{-
 update r rw = do
   T.modify (mappend (Info M.empty mempty ranks))
     where ranks = M.fromList.map (,Avg 1 weight).S.toList $ r
@@ -204,3 +262,4 @@ normalizeDeps = do
   let global = globalDepAvg_ st
       deps = M.map (\x -> (avg^=avg_ x - avg_ global) x) (depMap_ st)
   T.modify (depMap^=deps)
+-}
