@@ -70,6 +70,15 @@ data Part a = Part
 instance Show a => Show (Part a) where
     show (Part p s b) = show (S.toList p,s,b)
 
+instance Eq a => Eq (Part a) where
+    (Part _ x _) == (Part _ y _) = x == y
+
+instance Ord a => Ord (Part a) where
+    compare (Part _ x _) (Part _ y _)
+        | x == y = EQ
+        | x < y = LT
+        | otherwise = GT
+
 showRanking m = printList "\n" (rsortOn snd lst) ++ "\n"
     where lst = M.toList m
 
@@ -146,7 +155,8 @@ orchestra s f rem = do
            randFixedPartition (S.size useThis) 1.S.toList $ useThis
   partws <- liftIO.mapM f $ parts
   (nonZeroPs,zeroPs) <- processPartition base "1-PARTITION" s parts partws
-
+--  val <- liftIO $ f (S.difference s (S.fromList.concat $ map fst zeroPs))
+--  liftIO.putStrLn.show $ val
 --  let mini = snd.minimumBy (compare `on` snd) $ nonZeroPs
 --      nonZeroPs' = map (\(a,b) -> (a,b-mini)) nonZeroPs
 --  orch2 s nonZeroPs zeroPs f
@@ -158,7 +168,7 @@ orchestra s f rem = do
   -- xss <- allTwos base s zeroPs f
   -- prepareNextLevel xss
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
-  directPartition ps
+  exploreAll ps
 
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
@@ -172,16 +182,19 @@ prepareNextLevel xss = do
                                 Just _ -> M.insertWith (++) x [xs] m) m.fst $ xs
           collapse = nub.concat.map fst.filter ((==GT).snd)
 
+exploreAll ps = do
+  if length ps == 1
+   then return ps
+   else directPartition ps >>= exploreAll
+
 directPartition ps = do
   ps' <- eqClassesTM relation ps >>=
          return.partition ((==1).length) >>= \(lvlParts,others) ->
-         fmap (map (markAsNotSoft)) (mapM concatParts others) >>= \others' ->
+         mapM concatParts others >>= \others' ->
          return (map concatParts' (pairUp (concat lvlParts)) ++ others')
   liftIO.putStrLn.show.sortParts $ ps'
   return ps'
-    where relation p1 p2 = do
-            mergedScore <- fmap score (p1 <++> p2)
-            return $ score (p1 <+> p2) < mergedScore
+    where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
 
 allTwos base s xs f = do
   liftIO.mapM (\(x,xv) -> do

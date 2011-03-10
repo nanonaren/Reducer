@@ -35,6 +35,7 @@ main = do
 --  f (S.fromList [271,1110,364,281,1844,6652,308,1171,7218,693,9272] )
 --  f (S.fromList [1056,1169,7101,1154,1174,664,1171,1817,1855,1166,1072,1165,7083,7303,1983,411])
 --  f (S.fromList [281,1171,1056,7224,9272] )
+--  f (S.difference fs (S.fromList [1943,7303,9272]))
   return ()
 --  putStrLn.show $ inf
 --  sequenceCheck f inf
