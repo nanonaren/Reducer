@@ -12,33 +12,34 @@ import qualified Data.Map as M
 import ListUtils (rsortOn)
 import Text.CSV
 import System.Environment (getArgs)
-import Data.IORef
+import qualified Network.Memcache as C
+import Network.Memcache.Protocol
 
 main = do
   rootN <- fmap (read.(!!0)) getArgs
   hSetBuffering stdout NoBuffering
   fs76 <- get76Features
   featureMap <- getFeatures
-  (Right cacheList) <- parseCSVFromFile "/home/narens/.cacher"
-  let cache = M.fromList.map (\(x:y:_) -> (x,y)).filter ((==2).length) $ cacheList
-      maxFits = 197
+  let maxFits = 197
       root = rootN
       rootln = fromJust $ M.lookup root featureMap
       fs = S.delete root.S.fromList $ fs76
 
-  cacheRef <- newIORef cache
+  server <- connect "localhost" 11211
 
   (inp,out) <- setupR
-  let f = fmap fst.nnls cacheRef featureMap inp out maxFits rootln.S.toList
-      rem = S.fromList [7101,10798,1154,1166,1072,1169,1056,664,1178,1174,9272,1983,1855,1817,1165,364,2115,1155]
-  inf <- run (orchestra fs f rem)
+  let f = fmap fst.nnls server featureMap inp out maxFits rootln.S.toList
+
+--  inf <- run (orchestra fs f 364)
+--  mad <- f (S.difference fs (S.fromList [606,693,1072,1783,1852,271,308,382,1074,1088,1110,1155,1178,1181,1817,1844,2288,2291]))
+--  putStrLn.show $ 1-mad
 --  f (S.fromList [271,1110,364,281,1844,6652,308,1171,7218,693,9272] )
 --  f (S.fromList [1056,1169,7101,1154,1174,664,1171,1817,1855,1166,1072,1165,7083,7303,1983,411])
---  f (S.fromList [281,1171,1056,7224,9272] )
+  val <- f (S.fromList [281,1171,1056,7224,9272] )
+  putStrLn.show $ val
 --  f (S.difference fs (S.fromList [1943,7303,9272]))
+  disconnect server
   return ()
---  putStrLn.show $ inf
---  sequenceCheck f inf
 
 sequenceCheck :: (S.Set Int -> IO Double) -> Info Int -> IO ()
 sequenceCheck f inf = do
@@ -56,28 +57,22 @@ get76Features = do
   contents <- readFile "../data/76names.tab"
   return.map (read.head.words).lines $ contents
 
-nnls :: (IORef (M.Map String String)) -> M.Map Int Int -> Handle -> Handle
+nnls :: Server -> M.Map Int Int -> Handle -> Handle
      -> Double -> Int -> [Int] -> IO (Double,[Double])
-nnls cacheRef mp inp out maxFits root xs = do
-  cache <- readIORef cacheRef
+nnls server mp inp out maxFits root xs = do
   let xs' = map (fromJust.flip M.lookup mp) xs
       cmd = nnlscode [1..maxFits] xs' root
-  ln <- case M.lookup (show root ++ ":" ++ show xs') cache of
+      key = show root ++ ":" ++ show xs'
+  cacheVal <- C.get server key
+  case cacheVal of
     Nothing -> do
       hPutStr inp cmd
-      let key = show root ++ ":" ++ show xs'
-      value <- skipStupidLines out
-      appendFile "/home/narens/.cacher" (printCSV [[key,value]]++ "\n")
-      addToCache cacheRef key value
-      return value
-    Just v -> return v
-  let ws = words ln
-      numFits = read.head $ ws
-      coeffs = map read.tail $ ws
---  putStrLn.show $ (numFits,coeffs)
-  return (numFits,coeffs)
-
-addToCache cacheRef key value = modifyIORef cacheRef (M.insert key value)
+      ln <- skipStupidLines out
+      let ws = words ln
+          fit = read.head $ ws
+      C.set server key (show fit)
+      return (fit,[])
+    Just fit -> return (read fit,[])
 
 nnlscode factors children root =
     "parent <- t(m[" ++ show root ++ ",])[c(" ++ toRarr factors ++ "),]\n" ++

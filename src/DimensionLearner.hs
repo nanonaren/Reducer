@@ -144,9 +144,9 @@ stateSetup s f = do
 orchestra :: (Ord a,Show a) =>
              S.Set a -- ^The set of features
           -> (S.Set a -> IO Double) -- ^The objective function
-          -> S.Set a
+          -> a
           -> St a ()
-orchestra s f rem = do
+orchestra s f r = do
   stateSetup s f
   base <- gets (baseScore_)
   let useThis = s --S.difference s rem
@@ -168,7 +168,10 @@ orchestra s f rem = do
   -- xss <- allTwos base s zeroPs f
   -- prepareNextLevel xss
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
-  exploreAll ps
+      pset = S.fromList.concat $ map fst zeroPs
+  pscore <- liftIO $ f (S.difference s pset)
+  mad (Part pset (base - pscore) True)
+--  exploreAll ps
 
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
@@ -195,6 +198,38 @@ directPartition ps = do
   liftIO.putStrLn.show.sortParts $ ps'
   return ps'
     where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
+
+mad part@(Part ps s b) = do
+  base <- gets (baseScore_)
+  iden <- gets (fSet_)
+  f <- gets (scoref_)
+
+  (Part ps' _ _) <- wittle part
+  case ps == ps' of
+    True -> return ()
+    False -> do
+      liftIO.putStrLn.show $ S.difference ps ps'
+      let (r,ps'') = S.deleteFindMin ps'
+      s' <- liftM (base-).liftIO.f.S.difference iden $ ps''
+      case s' == 0 of
+        True -> return ()
+        False -> do
+               liftIO.putStrLn $ "removing " ++ show r ++ " and target score " ++ show s'
+               mad (Part ps'' s' b)
+
+wittle (Part ps s b) = do
+  f <- gets (scoref_)
+  iden <- gets (fSet_)
+  base <- gets (baseScore_)
+  ps' <- wittle' base iden f (map (,False).S.toList $ ps) s
+  return (Part (S.fromList ps') s b)
+wittle' _ _ _ [] _ = error "Cannot have null list when wittling."
+wittle' _ _ _ lst@((_,True):ps) _ = return (map fst lst)
+wittle' base iden f ((p,_):ps) s = do
+  val <- liftIO.f.S.difference iden.S.fromList.map fst $ ps
+  case (base-val) == s of
+    True -> liftIO (putStrLn $ "removed: " ++ show p) >> wittle' base iden f ps s
+    False -> wittle' base iden f (ps ++ [(p,True)]) s
 
 allTwos base s xs f = do
   liftIO.mapM (\(x,xv) -> do
