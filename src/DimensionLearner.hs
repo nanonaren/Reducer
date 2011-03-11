@@ -170,8 +170,13 @@ orchestra s f r = do
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
       pset = S.fromList.concat $ map fst zeroPs
   pscore <- liftIO $ f (S.difference s pset)
-  stuff <- mad (Part pset (base - pscore) True)
+  stuff <- factorIrreducibles (Part pset (base - pscore) True)
   liftIO.putStrLn.show $ stuff
+
+  -- let pset' = S.difference pset ps
+  -- pscore' <- liftIO $ f (S.difference s pset')
+  -- stuff2 <- mad (Part pset' (base - pscore') True)
+  -- liftIO.putStrLn.show $ stuff2
 --  exploreAll ps
 
   return ()
@@ -200,7 +205,20 @@ directPartition ps = do
   return ps'
     where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
 
-mad part@(Part ps s b) = do
+factorIrreducibles prt@(Part ps s b) = do
+  base <- gets (baseScore_)
+  iden <- gets (fSet_)
+  f <- gets (scoref_)
+  factor <- factorIrreducible prt
+  case ps == part factor of
+    True -> return [factor]
+    False -> do
+      let ps' = S.difference ps (part factor)
+      s' <- liftM (base-).liftIO.f.S.difference iden $ ps'
+      liftM (factor:) $ factorIrreducibles (Part ps' s' True)
+
+factorIrreducible part@(Part _ 0 _) = return part
+factorIrreducible part@(Part ps s b) = do
   liftIO.putStrLn $ "START: " ++ show s
   base <- gets (baseScore_)
   iden <- gets (fSet_)
@@ -210,7 +228,7 @@ mad part@(Part ps s b) = do
   (ps'',s') <- deleteOne f base iden (S.toList ps') ps'
   case ps' == ps'' of
     True -> liftIO (putStrLn $ "END: " ++ show s) >> return (Part ps' s False)
-    False -> liftIO (putStrLn $ "END: " ++ show s') >> mad (Part ps'' s' b)
+    False -> liftIO (putStrLn $ "END: " ++ show s') >> factorIrreducible (Part ps'' s' b)
 
 deleteOne _ _ _ [] original = return (original,0)
 deleteOne f base iden (p:ps) original = do
