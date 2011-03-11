@@ -30,13 +30,13 @@ main = do
   (inp,out) <- setupR
   let f = fmap fst.nnls server featureMap inp out maxFits rootln.S.toList
 
---  inf <- run (orchestra fs f 364)
+  inf <- run (orchestra fs f 364)
 --  mad <- f (S.difference fs (S.fromList [606,693,1072,1783,1852,271,308,382,1074,1088,1110,1155,1178,1181,1817,1844,2288,2291]))
 --  putStrLn.show $ 1-mad
 --  f (S.fromList [271,1110,364,281,1844,6652,308,1171,7218,693,9272] )
 --  f (S.fromList [1056,1169,7101,1154,1174,664,1171,1817,1855,1166,1072,1165,7083,7303,1983,411])
-  val <- f (S.fromList [281,1171,1056,7224,9272] )
-  putStrLn.show $ val
+--  val <- f (S.fromList [281,1171,1056,7224,9272] )
+--  putStrLn.show $ val
 --  f (S.difference fs (S.fromList [1943,7303,9272]))
   disconnect server
   return ()

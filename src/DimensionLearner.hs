@@ -170,7 +170,8 @@ orchestra s f r = do
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
       pset = S.fromList.concat $ map fst zeroPs
   pscore <- liftIO $ f (S.difference s pset)
-  mad (Part pset (base - pscore) True)
+  stuff <- mad (Part pset (base - pscore) True)
+  liftIO.putStrLn.show $ stuff
 --  exploreAll ps
 
   return ()
@@ -200,22 +201,24 @@ directPartition ps = do
     where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
 
 mad part@(Part ps s b) = do
+  liftIO.putStrLn $ "START: " ++ show s
   base <- gets (baseScore_)
   iden <- gets (fSet_)
   f <- gets (scoref_)
-
   (Part ps' _ _) <- wittle part
-  case ps == ps' of
-    True -> return ()
-    False -> do
-      liftIO.putStrLn.show $ S.difference ps ps'
-      let (r,ps'') = S.deleteFindMin ps'
-      s' <- liftM (base-).liftIO.f.S.difference iden $ ps''
-      case s' == 0 of
-        True -> return ()
-        False -> do
-               liftIO.putStrLn $ "removing " ++ show r ++ " and target score " ++ show s'
-               mad (Part ps'' s' b)
+  liftIO.putStrLn.show $ S.difference ps ps'
+  (ps'',s') <- deleteOne f base iden (S.toList ps') ps'
+  case ps' == ps'' of
+    True -> liftIO (putStrLn $ "END: " ++ show s) >> return (Part ps' s False)
+    False -> liftIO (putStrLn $ "END: " ++ show s') >> mad (Part ps'' s' b)
+
+deleteOne _ _ _ [] original = return (original,0)
+deleteOne f base iden (p:ps) original = do
+  let test = S.delete p original
+  s <- liftM (base-).liftIO.f.S.difference iden $ test
+  case s == 0 of
+    True -> deleteOne f base iden ps original
+    False -> return (test,s)
 
 wittle (Part ps s b) = do
   f <- gets (scoref_)
@@ -246,31 +249,6 @@ comp a b
     | a > b = "old > new"
     | otherwise = "old < new"
 
-{-
-  deps <- liftIO.mapM (\(x,xv) -> do
-                         v <- f (S.difference s x)
-                         if xv < (1-v)
-                          then return x
-                          else return (S.empty)
-                      ) $ xss
-  liftIO.putStrLn.render.fsep.punctuate comma.map (text.show.S.toList).filter ((>1).S.length) $ deps -}
-
-{-
-orch2 s nonZeroPs zeroPs f = do
-  parts2 <- liftIO.fmap (map (S.difference s.S.fromList)).evalRandIO.
-            randFixedPartition (length nonZeroPs) 2 $ nonZeroPs
-  partws2 <- liftIO.mapM f $ parts2
-  processPartition "2-PARTITION" s parts2 partws2
-  return ()
--}
---  parts <- liftIO.evalRandIO.fmap (map (S.difference s).concat) $ 
---            mapM (\_ -> randPartition np s) [1..nr]
---  partws <- liftIO.mapM f $ parts
---  mapM_ (\(pw,p) -> subOrchestra s f pw p).zip partws $ parts
---  normalizeDeps
-
---partIt s = 
-
 processPartition :: (Ord a,Show a) => Double -> String -> S.Set a -> [S.Set a]
                  -> [Double] -> St a ([([a],Double)],[([a],Double)])
 processPartition base name s ps pws = do
@@ -292,43 +270,3 @@ processPartition base name s ps pws = do
                               map (fst) $ nonZeroPs
           nameIt nm = text nm <> colon <> space
 
--- subOrchestra :: (Ord a,Show a) => S.Set a -> (S.Set a -> IO Double)
---              -> Double -> S.Set a -> St a ()
--- subOrchestra s f partw part = do
---   update (S.difference s part) (1-partw)
-  -- cofacs <- liftIO.evalRandIO $ randCoprimeFactors s part
-  -- case cofacs of
-  --   Nothing -> return () --liftIO.putStrLn.show $ "No factors to look at"
-  --   Just (f1,f2) -> do
-  --               update (S.difference s part) (1-partw)
-                -- f1w <- liftIO.f $ f1
-                -- f2w <- liftIO.f $ f2
-                -- let diff = (1-partw) - ((1-f1w)+(1-f2w))
-                -- updateDeps (S.difference s part) (1-partw) (S.difference s f1)
-                --            (S.difference s f2) diff
-                -- liftIO.putStrLn $ "DIVISOR: " ++ show part
-                -- liftIO.putStrLn $ "DIVISOR REM WEIGHT: " ++ show (1-partw)
-                -- liftIO.putStrLn $ "F1 REM WEIGHT: " ++ show (1-f1w)
-                -- liftIO.putStrLn $ "F2 REM WEIGHT: " ++ show (1-f2w)
-                -- liftIO.putStrLn.show $ diff
-{-
-update r rw = do
-  T.modify (mappend (Info M.empty mempty ranks))
-    where ranks = M.fromList.map (,Avg 1 weight).S.toList $ r
-          weight = rw / fromIntegral (S.size r)
-
-updateDeps :: Ord a => S.Set a -> Double -> S.Set a
-           -> S.Set a -> Double -> St a ()
-updateDeps r rw r1 r2 w = do
-  T.modify (mappend (Info deps (Avg 1 w) ranks))
-    where pairs = chooseSortedPairs (S.toList r1) (S.toList r2)
-          deps = M.fromList.map (,Avg 1 w) $ pairs
-          ranks = M.fromList.map (,Avg 1 rw).S.toList $ r
-
-normalizeDeps :: St a ()
-normalizeDeps = do
-  st <- T.get
-  let global = globalDepAvg_ st
-      deps = M.map (\x -> (avg^=avg_ x - avg_ global) x) (depMap_ st)
-  T.modify (depMap^=deps)
--}
