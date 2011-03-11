@@ -14,6 +14,8 @@ import Text.CSV
 import System.Environment (getArgs)
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
+import Data.Digest.Pure.SHA (showDigest,sha512)
+import Data.ByteString.Lazy.Char8 (pack)
 
 main = do
   rootN <- fmap (read.(!!0)) getArgs
@@ -62,7 +64,7 @@ nnls :: Server -> M.Map Int Int -> Handle -> Handle
 nnls server mp inp out maxFits root xs = do
   let xs' = map (fromJust.flip M.lookup mp) xs
       cmd = nnlscode [1..maxFits] xs' root
-      key = show root ++ ":" ++ show xs'
+      key = showDigest.sha512.pack $ show root ++ ":" ++ show xs'
   cacheVal <- C.get server key
   case cacheVal of
     Nothing -> do

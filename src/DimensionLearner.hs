@@ -122,10 +122,14 @@ a@(Part p1 s1 b1) <++> b@(Part p2 s2 b2)
 
 emptyPart = Part S.empty 0 False
 
-concatParts [] = return emptyPart
+concatParts [] = error "Cannot concat empty parts list"
 concatParts (x:xs) = do
-  let pt = concatParts' xs
-  x <++> pt
+  let allZero = all ((==0).score) (x:xs)
+      pt = concatParts' xs
+  prt <- x <++> pt
+  case allZero of
+    True -> liftIO (putStrLn $ ">>> Factoring: " ++ show (x:xs)) >> factorIrreducibles prt
+    False -> return [prt]
 
 concatParts' :: Ord a => [Part a] -> Part a
 concatParts' = foldl' (<+>) emptyPart
@@ -168,16 +172,17 @@ orchestra s f r = do
   -- xss <- allTwos base s zeroPs f
   -- prepareNextLevel xss
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
-      pset = S.fromList.concat $ map fst zeroPs
-  pscore <- liftIO $ f (S.difference s pset)
-  stuff <- factorIrreducibles (Part pset (base - pscore) True)
-  liftIO.putStrLn.show $ stuff
+  --     pset = S.fromList.concat $ map fst zeroPs
+  -- pscore <- liftIO $ f (S.difference s pset)
+  -- stuff <- factorIrreducibles (Part pset (base - pscore) True)
+  -- liftIO.putStrLn.show $ stuff
 
   -- let pset' = S.difference pset ps
   -- pscore' <- liftIO $ f (S.difference s pset')
   -- stuff2 <- mad (Part pset' (base - pscore') True)
   -- liftIO.putStrLn.show $ stuff2
---  exploreAll ps
+  --directPartition ps >>= directPartition >>= directPartition >>= directPartition
+  exploreAll ps
 
   return ()
   --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
@@ -199,8 +204,8 @@ exploreAll ps = do
 directPartition ps = do
   ps' <- eqClassesTM relation ps >>=
          return.partition ((==1).length) >>= \(lvlParts,others) ->
-         mapM concatParts others >>= \others' ->
-         return (map concatParts' (pairUp (concat lvlParts)) ++ others')
+         fmap concat (mapM concatParts others) >>= \others' ->
+         return (map concatParts' (pairUp (sortOn (S.findMin.part).concat $ lvlParts)) ++ others')
   liftIO.putStrLn.show.sortParts $ ps'
   return ps'
     where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
@@ -219,7 +224,6 @@ factorIrreducibles prt@(Part ps s b) = do
 
 factorIrreducible part@(Part _ 0 _) = return part
 factorIrreducible part@(Part ps s b) = do
-  liftIO.putStrLn $ "START: " ++ show s
   base <- gets (baseScore_)
   iden <- gets (fSet_)
   f <- gets (scoref_)
@@ -227,8 +231,8 @@ factorIrreducible part@(Part ps s b) = do
   liftIO.putStrLn.show $ S.difference ps ps'
   (ps'',s') <- deleteOne f base iden (S.toList ps') ps'
   case ps' == ps'' of
-    True -> liftIO (putStrLn $ "END: " ++ show s) >> return (Part ps' s False)
-    False -> liftIO (putStrLn $ "END: " ++ show s') >> factorIrreducible (Part ps'' s' b)
+    True -> return (Part ps' s False)
+    False -> factorIrreducible (Part ps'' s' b)
 
 deleteOne _ _ _ [] original = return (original,0)
 deleteOne f base iden (p:ps) original = do
@@ -249,7 +253,7 @@ wittle' _ _ _ lst@((_,True):ps) _ = return (map fst lst)
 wittle' base iden f ((p,_):ps) s = do
   val <- liftIO.f.S.difference iden.S.fromList.map fst $ ps
   case (base-val) == s of
-    True -> liftIO (putStrLn $ "removed: " ++ show p) >> wittle' base iden f ps s
+    True -> wittle' base iden f ps s
     False -> wittle' base iden f (ps ++ [(p,True)]) s
 
 allTwos base s xs f = do
