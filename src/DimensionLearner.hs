@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections,TemplateHaskell #-}
+{-# LANGUAGE TupleSections,TemplateHaskell,NoMonomorphismRestriction #-}
 module DimensionLearner
     (
       orchestra
@@ -11,8 +11,9 @@ import MapUtils (unionWithMonoid)
 import NanoUtils.List
 import NanoUtils.Monadic.List
 import TupleUtils (swap,mapFst)
-import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub,foldl')
+import Data.List (maximumBy,minimumBy,partition,sort,nubBy,nub,foldl',(\\))
 import Data.Function (on)
+import Control.Monad (ap)
 import Control.Monad.Random
 import Control.Monad.State as T
 import qualified Data.Set as S
@@ -20,7 +21,7 @@ import qualified Data.Map as M
 import qualified DoubleMap as D
 import Data.Monoid
 import Data.Accessor.Template
-import Data.Accessor.Basic
+import Data.Accessor.Basic hiding (null)
 import System.Random
 import Text.PrettyPrint hiding ((<+>))
 
@@ -53,10 +54,12 @@ data Info a = Info
     , baseScore_ :: Double
     , scoref_ :: S.Set a -> IO Double
     , fSet_ :: S.Set a
+    , irreducibles_ :: [(Part a,Bool)] -- Bool to indicate redundant
+    , composites :: [Part a]
     }
 
 instance Show a => Show (Info a) where
-    show (Info dm g r _ _ _) =
+    show (Info dm g r _ _ _ _ _) =
         "Global Dep Avg: " ++ show g ++ "\n" ++ showRanking r -- ++ showDeps dm
 --        printList "\n" (M.toList dm)
 
@@ -101,7 +104,7 @@ type St a = T.StateT (Info a) IO
 
 run m = execStateT m emptyInfo
 
-emptyInfo = Info M.empty mempty M.empty undefined undefined undefined
+emptyInfo = Info M.empty mempty M.empty undefined undefined undefined [] []
 
 a@(Part p1 s1 _) <+> b@(Part p2 s2 _)
     | S.null p1 = b
@@ -124,17 +127,42 @@ emptyPart = Part S.empty 0 False
 
 concatParts [] = error "Cannot concat empty parts list"
 concatParts (x:xs) = do
-  let allZero = all ((==0).score) (x:xs)
+  let (zeros,nonZeros) = partition ((==0).score) (x:xs)
       pt = concatParts' xs
-  prt <- x <++> pt
-  case allZero of
-    True -> liftIO (putStrLn $ ">>> Factoring: " ++ show (x:xs)) >> factorIrreducibles prt
-    False -> return [prt]
+  case null zeros of
+    True -> do
+      prt <- x <++> pt
+      liftIO (putStrLn $ ">>> Add " ++ show prt ++ " as closure")
+      return [prt]
+    False -> do
+      liftIO (putStrLn $ ">>> Factoring: " ++ show zeros)
+      zprt <- head zeros <++> concatParts' (tail zeros)
+      liftIO.putStrLn $ "$$$ zpart has value: " ++ show (score zprt)
+
+      case score zprt of
+        -- one-sided redundancy
+        0 -> do
+          liftIO (putStrLn "ONE-SIDED redundancy; wittling:")
+          full <- x <++> pt
+          wittledprt <- wittle full
+          let rest = S.difference (part full) (part wittledprt)
+          return.orderParts $ [wittledprt,(Part rest 0 True)]
+        _ -> do
+          newprts <- factorIrreducibles zprt
+          case length newprts == 1 of
+            -- no irreducibles found
+            True -> liftM (:[]) (x <++> pt)
+            _ -> if null nonZeros
+                  then return (orderParts newprts)
+                  else head nonZeros <++> concatParts' (tail nonZeros) >>= \nprt ->
+                       return (orderParts $ nprt:newprts)
 
 concatParts' :: Ord a => [Part a] -> Part a
 concatParts' = foldl' (<+>) emptyPart
 
 markAsNotSoft (Part p1 s1 _) = Part p1 s1 False
+
+orderParts = sortOn (S.findMin.part)
 
 sortParts = rsortOn score
 
@@ -159,33 +187,11 @@ orchestra s f r = do
            randFixedPartition (S.size useThis) 1.S.toList $ useThis
   partws <- liftIO.mapM f $ parts
   (nonZeroPs,zeroPs) <- processPartition base "1-PARTITION" s parts partws
---  val <- liftIO $ f (S.difference s (S.fromList.concat $ map fst zeroPs))
---  liftIO.putStrLn.show $ val
---  let mini = snd.minimumBy (compare `on` snd) $ nonZeroPs
---      nonZeroPs' = map (\(a,b) -> (a,b-mini)) nonZeroPs
---  orch2 s nonZeroPs zeroPs f
-  -- liftIO.putStrLn $ "#####NON-ZEROS#####"
-  -- xss <- allTwos base s nonZeroPs f
-  -- prepareNextLevel xss
-
-  -- liftIO.putStrLn $ "#####ZEROS#####"
-  -- xss <- allTwos base s zeroPs f
-  -- prepareNextLevel xss
   let ps = map (\(xs,v) -> Part (S.fromList xs) v False) zeroPs
-  --     pset = S.fromList.concat $ map fst zeroPs
-  -- pscore <- liftIO $ f (S.difference s pset)
-  -- stuff <- factorIrreducibles (Part pset (base - pscore) True)
-  -- liftIO.putStrLn.show $ stuff
-
-  -- let pset' = S.difference pset ps
-  -- pscore' <- liftIO $ f (S.difference s pset')
-  -- stuff2 <- mad (Part pset' (base - pscore') True)
-  -- liftIO.putStrLn.show $ stuff2
-  --directPartition ps >>= directPartition >>= directPartition >>= directPartition
   exploreAll ps
-
+  lst <- gets (irreducibles_)
+  liftIO.putStrLn.show $ lst
   return ()
-  --sequence_ (replicate 20 (orch2 s nonZeroPs zeroPs f))
 
 prepareNextLevel xss = do
   let mp = foldl' arrange M.empty xss
@@ -197,24 +203,32 @@ prepareNextLevel xss = do
           collapse = nub.concat.map fst.filter ((==GT).snd)
 
 exploreAll ps = do
-  if length ps == 1
-   then return ps
-   else directPartition ps >>= exploreAll
+  ps' <- directPartition ps
+  if null (ps \\ ps')
+    then return ps'
+    else exploreAll ps'
 
 directPartition ps = do
   ps' <- eqClassesTM relation ps >>=
-         return.partition ((==1).length) >>= \(lvlParts,others) ->
+         return.partition selectForSoftMerge >>= \(lvlParts,others) ->
          fmap concat (mapM concatParts others) >>= \others' ->
          return (map concatParts' (pairUp (sortOn (S.findMin.part).concat $ lvlParts)) ++ others')
   liftIO.putStrLn.show.sortParts $ ps'
   return ps'
     where relation p1 p2 = liftM2 (<) (return (p1 <+> p2)) (p1 <++> p2)
 
+selectForSoftMerge xs = length xs == 1 && (score $ head xs) == 0
+
+storeIrreducible prt redun = do
+  irr <- gets (irreducibles_)
+  T.modify (irreducibles^=(prt,redun):irr)
+
 factorIrreducibles prt@(Part ps s b) = do
   base <- gets (baseScore_)
   iden <- gets (fSet_)
   f <- gets (scoref_)
   factor <- factorIrreducible prt
+  when (score factor /= 0) (storeIrreducible factor True)
   case ps == part factor of
     True -> return [factor]
     False -> do
