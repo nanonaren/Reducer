@@ -12,13 +12,13 @@ testFeatures =
     fmap and $
     mapM (fmap isSuccess.quickCheckResult) [prop_id,prop_diff]
 
-genInts = listOf (choose (1,100))
+genInts = fmap (sort.nub) $ listOf (choose (1,100))
 
 -- |id = toList.fromList
 prop_id =
-    forAll genInts $ \xs -> (==nub (sort xs)).toList.fromList $ xs
+    forAll genInts $ \xs -> (==xs).toList.fromList $ xs
 
 -- |check diff function
 prop_diff =
     forAll (genInts >>= \xs -> genInts >>= \ys -> return (xs,ys)) $ \(xs,ys) ->
-    toList (fromList xs `diff` fromList ys) == sort (nub xs \\ nub ys)
+    toList (fromList xs `diff` fromList ys) == xs \\ ys

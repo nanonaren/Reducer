@@ -1,6 +1,7 @@
 module Math.FeatureReduction.Features
     (
-      diff
+      Features
+    , diff
     , toList
     , fromList
     ) where
