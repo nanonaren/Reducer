@@ -47,8 +47,9 @@ level1 psi = do
 -- |Level 2
 level2 :: Monad m => Psi m -> Features -> St m [Int]
 level2 psi fs = do
+  allfs <- gets (fromList.allFS)
   let fsLst = toList fs
-  xs <- lift.mapM (\f -> liftM (f,).psi fs.fromList $ f) $ choose2 fsLst --R
+  xs <- lift.mapM (\f -> liftM (f,).psi allfs.fromList $ f) $ choose2 fsLst --R
   let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
       counts = countMap (concat nonZeros)
   return $ stuff nonZeros counts

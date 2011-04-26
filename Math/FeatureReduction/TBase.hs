@@ -14,9 +14,8 @@ import Test.QuickCheck.Test
 testBase = do
   xs <- mapM (fmap isSuccess.quickCheckResult)
         [prop_phiToPsi,prop_phiToPsi_zeroBound]
---  o1 <- runOnce test_level1
-  o2 <- runOnce test_level2
-  return.and $ o2:xs
+  os <- mapM runOnce [test_level1,test_level2_one,test_level2_two]
+  return.and $ os ++ xs
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
 
@@ -36,9 +35,12 @@ prop_phiToPsi_zeroBound = do
 test_level1 = runIdentity (evalStateT (level1 (samplePsi 50)) sample) ==
               (fromList [6,7,8,9,10],fromList [0..5])
 
-test_level2 =
+test_level2_one =
     runIdentity (evalStateT (level2 (samplePsi 40) (fromList [0..10])) sample) ==
     [10,9]
+
+test_level2_two =
+    runIdentity (evalStateT (level2 (samplePsi 30) (fromList [0..5])) sample) == []
 
 runOnce = fmap isSuccess.quickCheckWithResult (stdArgs{maxSuccess=1})
 
