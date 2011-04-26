@@ -5,13 +5,16 @@ module Math.FeatureReduction.Base
     , Value
     , phiToPsi
     , level1
+    , level2
     ) where
 
 import Control.Monad.State
 import Data.List (partition,intersect)
+import qualified Data.Map as M
 import Data.Functor.Identity
 import Math.FeatureReduction.Features
 import NanoUtils.Tuple
+import NanoUtils.List (choose2)
 
 data FeatureInfo = FeatureInfo
     {
@@ -38,5 +41,24 @@ level1 :: Monad m => Psi m -> St m (Features,Features)
 level1 psi = do
   allfs <- gets allFS
   let fs = fromList allfs
-  xs <- lift.mapM (\f -> liftM (f,).psi fs.fromList.(:[]) $ f) $ allfs
+  xs <- lift.mapM (\f -> liftM (f,).psi fs.fromList.(:[]) $ f) $ allfs --R
   return.mapHomTup (fromList.map fst).partition ((>0).snd) $ xs
+
+-- |Level 2
+level2 :: Monad m => Psi m -> Features -> St m [Int]
+level2 psi fs = do
+  let fsLst = toList fs
+  xs <- lift.mapM (\f -> liftM (f,).psi fs.fromList $ f) $ choose2 fsLst --R
+  let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
+      counts = countMap (concat nonZeros)
+  return $ stuff nonZeros counts
+
+stuff :: Ord a => [[a]] -> M.Map a Int -> [a]
+stuff [] _ = []
+stuff xs counts =
+    let ((i,_),counts') = M.deleteFindMax counts
+        xs' = filter (not.elem i) xs
+    in i : stuff xs' counts'
+
+countMap :: Ord a => [a] -> M.Map a Int
+countMap = M.fromListWith (+).flip zip (repeat 1)
