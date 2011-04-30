@@ -7,11 +7,12 @@ module Math.FeatureReduction.Base
     , level1
     , level2
     , leveln
+    , complete
     ) where
 
 import Control.Monad.State
 import Data.List (partition,intersect,splitAt,maximumBy)
-import Data.Ord (comparing)
+import Data.Function (on)
 import qualified Data.Map as M
 import Data.Functor.Identity
 import Math.FeatureReduction.Features
@@ -65,6 +66,12 @@ leveln psi n fs = do
   let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
   mapM (irred psi) nonZeros >>= picks psi
 
+complete :: Monad m => Psi m -> St m [Int]
+complete psi = do
+  (r1,ys) <- level1 psi
+  r2 <- level2 psi ys
+  return (toList r1 ++ r2)
+
 -- |Pick from a list of irreds
 picks :: Monad m => Psi m -> [[Int]] -> St m [Int]
 picks psi [] = return []
@@ -77,7 +84,7 @@ picks psi (xs:xss) = do
 pick :: Monad m => Psi m -> [Int] -> St m Int
 pick psi xs = do
   ls <- lift $ mapM (psi (fromList []).fromList.(:[])) xs
-  return.fst.maximumBy (comparing snd).zip xs.map (*(-1)) $ ls
+  return.fst.maximumBy (compare `on` snd).zip xs.map (*(-1)) $ ls
 
 -- |Get a single irreducible
 irred :: Monad m => Psi m -> [Int] -> St m [Int]
