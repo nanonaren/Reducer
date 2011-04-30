@@ -8,6 +8,7 @@ module Math.FeatureReduction.Base
     , level2
     , leveln
     , complete
+    , irreds
     ) where
 
 import Control.Monad.State
@@ -64,27 +65,28 @@ leveln psi n fs = do
   allfs <- gets (fromList.allFS)
   xs <- psiMap psi.map concat.choose2.chunk (div n 2).toList $ fs
   let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
-  mapM (irred psi) nonZeros >>= picks psi
+  mapM (irreds psi) nonZeros >>= picks psi.concat
 
 complete :: Monad m => Psi m -> St m [Int]
 complete psi = do
   (r1,ys) <- level1 psi
   r2 <- level2 psi ys
-  return (toList r1 ++ r2)
+  r3 <- leveln psi 4 (diff ys (fromList r2))
+  return (toList r1 ++ r2 ++ r3)
 
 -- |Pick from a list of irreds
 picks :: Monad m => Psi m -> [[Int]] -> St m [Int]
 picks psi [] = return []
-picks psi (xs:xss) = do
-  p <- pick psi xs
-  liftM (p:).picks psi $ filter (not.elem p) xss
+picks psi xss = do
+  p <- mapM (pick psi) xss >>= return.maximumBy (compare `on` snd)
+  liftM (fst p:).picks psi $ filter (not.elem (fst p)) xss
 
 -- |Pick an element from an irreducible
 -- TODO: change to phi *NOT* psi
-pick :: Monad m => Psi m -> [Int] -> St m Int
+pick :: Monad m => Psi m -> [Int] -> St m (Int,Double)
 pick psi xs = do
   ls <- lift $ mapM (psi (fromList []).fromList.(:[])) xs
-  return.fst.maximumBy (compare `on` snd).zip xs.map (*(-1)) $ ls
+  return.maximumBy (compare `on` snd).zip xs.map (*(-1)) $ ls
 
 -- |Get a single irreducible
 irred :: Monad m => Psi m -> [Int] -> St m [Int]

@@ -16,7 +16,8 @@ testBase = do
         [prop_phiToPsi,prop_phiToPsi_zeroBound]
   os <- mapM runOnce [test_level1,test_level2_one,test_level2_two,
                       test_level3_one,test_level3_two,
-                      test_complete_one,test_complete_two]
+                      test_complete_one,test_complete_two,
+                      test_complete_three,test_complete_four]
   return.and $ os ++ xs
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
@@ -51,10 +52,16 @@ test_level3_two =
     runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [2..7])) sample) == [7]
 
 test_complete_one =
-    runIdentity (evalStateT (complete (samplePsi 40)) sample) == [10,9]
+    runIdentity (evalStateT (complete (samplePsi 46)) sample) == [10,9,8,7,6,5,4]
 
 test_complete_two =
-    runIdentity (evalStateT (complete (samplePsi 46)) sample) == [10,9,8,7,6]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1..10]))) == [10,9,8,7,6,5,4]
+
+test_complete_three =
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo [1,20,10,5,9,2,7])) == [9,10,20,7]
+
+test_complete_four =
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1,20,10,5,9,2,7]))) == [9,10,20,7]
 
 runOnce = fmap isSuccess.quickCheckWithResult (stdArgs{maxSuccess=1})
 
