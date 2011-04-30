@@ -6,15 +6,18 @@ module Math.FeatureReduction.Base
     , phiToPsi
     , level1
     , level2
+    , leveln
     ) where
 
 import Control.Monad.State
-import Data.List (partition,intersect)
+import Data.List (partition,intersect,splitAt,maximumBy)
+import Data.Ord (comparing)
 import qualified Data.Map as M
 import Data.Functor.Identity
 import Math.FeatureReduction.Features
+import NanoUtils.Container (foldMapM)
 import NanoUtils.Tuple
-import NanoUtils.List (choose2)
+import NanoUtils.List (choose2,pairUp,leaveOneOuts,chunk)
 
 data FeatureInfo = FeatureInfo
     {
@@ -49,10 +52,50 @@ level2 :: Monad m => Psi m -> Features -> St m [Int]
 level2 psi fs = do
   allfs <- gets (fromList.allFS)
   let fsLst = toList fs
-  xs <- lift.mapM (\f -> liftM (f,).psi allfs.fromList $ f) $ choose2 fsLst --R
+  xs <- psiMap psi $ choose2 fsLst --R
   let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
       counts = countMap (concat nonZeros)
   return $ stuff nonZeros counts
+
+-- |level n, n > 2
+leveln :: Monad m => Psi m -> Int -> Features -> St m [Int]
+leveln psi n fs = do
+  allfs <- gets (fromList.allFS)
+  xs <- psiMap psi.map concat.choose2.chunk (div n 2).toList $ fs
+  let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
+  mapM (irred psi) nonZeros >>= picks psi
+
+-- |Pick from a list of irreds
+picks :: Monad m => Psi m -> [[Int]] -> St m [Int]
+picks psi [] = return []
+picks psi (xs:xss) = do
+  p <- pick psi xs
+  liftM (p:).picks psi $ filter (not.elem p) xss
+
+-- |Pick an element from an irreducible
+-- TODO: change to phi *NOT* psi
+pick :: Monad m => Psi m -> [Int] -> St m Int
+pick psi xs = do
+  ls <- lift $ mapM (psi (fromList []).fromList.(:[])) xs
+  return.fst.maximumBy (comparing snd).zip xs.map (*(-1)) $ ls
+
+-- |Get a single irreducible
+irred :: Monad m => Psi m -> [Int] -> St m [Int]
+irred psi xs = irreds psi xs >>= return.head
+
+-- |Get all irreducibles
+irreds :: Monad m => Psi m -> [Int] -> St m [[Int]]
+irreds psi xs = do
+  cands <- psiMap psi (leaveOneOuts xs) >>=
+           return.map fst.filter ((>0).snd)
+  case cands of
+    [] -> return [xs]
+    xs -> foldMapM (irreds psi) cands
+
+psiMap :: Monad m => Psi m -> [[Int]] -> St m [([Int],Double)]
+psiMap psi xs = do
+  allfs <- gets (fromList.allFS)
+  lift.mapM (\f -> liftM (f,).psi allfs.fromList $ f) $ xs
 
 stuff :: Ord a => [[a]] -> M.Map a Int -> [a]
 stuff [] _ = []
