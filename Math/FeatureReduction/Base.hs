@@ -16,14 +16,14 @@ import Data.List (partition,intersect,splitAt,maximumBy)
 import Data.Function (on)
 import qualified Data.Map as M
 import Data.Functor.Identity
-import Math.FeatureReduction.Features hiding (choose2,chunk)
+import Math.FeatureReduction.Features
 import NanoUtils.Container (foldMapM)
 import NanoUtils.Tuple
-import NanoUtils.List (pairUp,leaveOneOuts,chunk)
+import NanoUtils.List (pairUp)
 
 data FeatureInfo = FeatureInfo
     {
-      allFS :: [Int]
+      allFS :: Features
     }
 
 type St = StateT FeatureInfo
@@ -42,78 +42,76 @@ phiToPsi phi =
         return $ if inf < 0 then 0 else inf
 
 -- |Level 1
-level1 :: Monad m => Psi m -> St m [Int]
+level1 :: Monad m => Psi m -> St m Features
 level1 psi = do
   allfs <- gets allFS
-  nonZeros <- evalAndPart psi $ map (:[]) allfs
-  return (concat nonZeros)
+  nonZeros <- evalAndPart psi.split 1 $ allfs
+  return (unions nonZeros)
 
 -- |Level 2
-level2 :: Monad m => Psi m -> Features -> St m [Int]
+level2 :: Monad m => Psi m -> Features -> St m Features
 level2 psi ireds = do
   fs <- complement ireds
-  nonZeros <- evalAndPart psi $ choose2 (toList fs)
-  let counts = countMap (concat nonZeros)
+  nonZeros <- evalAndPart psi.choose2.split 1 $ fs
+  let counts = countMap (concat.map toList $ nonZeros)
   return $ stuff nonZeros counts
 
 -- |level n, n > 2
-leveln :: Monad m => Psi m -> Int -> Features -> St m [Int]
+leveln :: Monad m => Psi m -> Int -> Features -> St m Features
 leveln psi n ireds = do
   fs <- complement ireds
-  nonZeros <- evalAndPart psi.map concat.choose2.chunk (div n 2).toList $ fs
+  nonZeros <- evalAndPart psi.choose2.split (div n 2) $ fs
   mapM (irreds psi) nonZeros >>= picks psi.concat
 
-complete :: Monad m => Psi m -> St m [Int]
-complete psi = complete' psi (fromList []) 0 >>= return.toList
+complete :: Monad m => Psi m -> St m Features
+complete psi = complete' psi (fromList []) 0
 complete' psi ireds n = do
   b <- stopAlg psi ireds
   case b of
     True -> return ireds
     False -> complete'' psi ireds n
-complete'' psi _ 0 = level1 psi >>= \rs -> complete' psi (fromList rs) 1
+complete'' psi _ 0 = level1 psi >>= \rs -> complete' psi rs 1
 complete'' psi ireds 1 = level2 psi ireds >>= \rs ->
-                         complete' psi (fromList $ rs++toList ireds) 2
+                         complete' psi (rs `union` ireds) 2
 complete'' psi ireds n = leveln psi (2^n) ireds >>= \rs ->
-                        complete' psi (fromList $ rs++toList ireds) (n+1)
+                         complete' psi (rs `union` ireds) (n+1)
 
 stopAlg :: Monad m => Psi m -> Features -> St m Bool
 stopAlg psi ireds = do
-  allfs <- gets (fromList.allFS)
+  allfs <- gets allFS
   comp <- complement ireds
   lift (psi allfs comp) >>= return.(==0)
 
 -- | set complement of X in F
 complement :: Monad m => Features -> St m Features
-complement ireds = do
-  allfs <- gets (fromList.allFS)
-  return $ diff allfs ireds
+complement ireds = gets allFS >>= return.flip diff ireds
 
 -- |Apply psi to list and partition into zero and non-zero
-evalAndPart :: Monad m => Psi m -> [[Int]] -> St m [[Int]]
+evalAndPart :: Monad m => Psi m -> [Features] -> St m [Features]
 evalAndPart psi xss = do
   xs <- psiMap psi xss
   return.map fst.fst.partition ((>0).snd) $ xs
 
 -- |Pick from a list of irreds
-picks :: Monad m => Psi m -> [[Int]] -> St m [Int]
-picks psi [] = return []
+picks :: Monad m => Psi m -> [Features] -> St m Features
+picks psi [] = return (fromList [])
 picks psi xss = do
   p <- mapM (pick psi) xss >>= return.maximumBy (compare `on` snd)
-  liftM (fst p:).picks psi $ filter (not.elem (fst p)) xss
+  liftM (add (fst p)).picks psi $ filter (not.member (fst p)) xss
 
 -- |Pick an element from an irreducible
 -- TODO: change to phi *NOT* psi
-pick :: Monad m => Psi m -> [Int] -> St m (Int,Double)
+pick :: Monad m => Psi m -> Features -> St m (Int,Double)
 pick psi xs = do
-  ls <- lift $ mapM (psi (fromList []).fromList.(:[])) xs
-  return.maximumBy (compare `on` snd).zip xs.map (*(-1)) $ ls
+  ls <- lift $ mapM (psi (fromList [])).split 1 $ xs
+  return.maximumBy (compare `on` snd).zip (toList xs).map (*(-1)) $ ls
 
 -- |Get a single irreducible
-irred :: Monad m => Psi m -> [Int] -> St m [Int]
+irred :: Monad m => Psi m -> Features -> St m Features
 irred psi xs = irreds psi xs >>= return.head
 
 -- |Get all irreducibles
-irreds :: Monad m => Psi m -> [Int] -> St m [[Int]]
+irreds :: Monad m => Psi m -> Features -> St m [Features]
 irreds psi xs = do
   cands <- psiMap psi (leaveOneOuts xs) >>=
            return.map fst.filter ((>0).snd)
@@ -121,23 +119,18 @@ irreds psi xs = do
     [] -> return [xs]
     xs -> foldMapM (irreds psi) cands
 
-psiMap :: Monad m => Psi m -> [[Int]] -> St m [([Int],Double)]
+psiMap :: Monad m => Psi m -> [Features] -> St m [(Features,Double)]
 psiMap psi xs = do
-  allfs <- gets (fromList.allFS)
-  lift.mapM (\f -> liftM (f,).psi allfs.fromList $ f) $ xs
+  allfs <- gets allFS
+  lift.mapM (\f -> liftM (f,).psi allfs $ f) $ xs
 
-stuff :: Ord a => [[a]] -> M.Map a Int -> [a]
-stuff [] _ = []
+stuff :: [Features] -> M.Map Int Int -> Features
+stuff [] _ = fromList []
 stuff xs counts =
     let ((i,_),counts') = M.deleteFindMax counts
-        xs' = filter (not.elem i) xs
-    in i : stuff xs' counts'
+        xs' = filter (not.member i) xs
+    in add i (stuff xs' counts')
 
-countMap :: Ord a => [a] -> M.Map a Int
+countMap :: [Int] -> M.Map Int Int
 countMap = M.fromListWith (+).flip zip (repeat 1)
 
--- |Special choose 2, because if only one elem it will return it
--- I need it to work like this
-choose2 [] = []
-choose2 (x:[]) = [[x]]
-choose2 (x:xs) = [[x,y]|y<-xs] ++ choose2 xs

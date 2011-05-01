@@ -2,19 +2,23 @@ module Math.FeatureReduction.Features
     (
       Features
     , diff
+    , add
     , union
+    , unions
     , delete
     , size
+    , member
     , toList
     , fromList
-    , chunk
+    , split
     , choose2
+    , leaveOneOuts
     ) where
 
 import qualified Data.BitSet as B
 import Data.List (foldl')
 import Data.Bits
-import qualified NanoUtils.List as L (chunk)
+import qualified NanoUtils.List as L (chunk,leaveOneOuts)
 
 {- 
 ******* NOTE **********
@@ -23,10 +27,22 @@ The ints must be >= 1
 -}
 
 newtype Features = Features (B.BitSet Int)
-    deriving (Eq,Show)
+    deriving (Show)
 
-chunk :: Int -> [Features] -> [Features]
-chunk n = map unions.L.chunk n
+instance Eq Features where
+    f1 == f2 = toList f1 == toList f2
+
+add :: Int -> Features -> Features
+add i fs = union fs (fromList [i])
+
+member :: Int -> Features -> Bool
+member i (Features fs) = B.member i fs
+
+split :: Int -> Features -> [Features]
+split n = map fromList.L.chunk n.toList
+
+leaveOneOuts :: Features -> [Features]
+leaveOneOuts = map fromList.L.leaveOneOuts.toList
 
 choose2 :: [Features] -> [Features]
 choose2 = map unions.choose2'

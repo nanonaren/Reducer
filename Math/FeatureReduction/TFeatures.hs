@@ -17,8 +17,8 @@ testFeatures = [testGroup "Features"
                , testProperty "diff" prop_diff
                , testProperty "union" prop_union
                , testProperty "size" prop_size
-               , testCase "chunk" test_chunk
---               , testCase "choose2" test_choose2
+               , testCase "split" test_split
+               , testCase "choose2" test_choose2
                ]]
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
@@ -40,10 +40,10 @@ prop_union =
 prop_size =
     forAll genInts $ \xs -> (==length xs).size.fromList $ xs
 
-test_chunk =
-    map toList (chunk 2 (map fromList.map (:[]) $ [1..11])) @?=
+test_split =
+    map toList (split 2 (fromList [1..11])) @?=
             [[1,2],[3,4],[5,6],[7,8],[9,10],[11]]
 
 test_choose2 =
-    map toList (choose2 (map fromList.map (:[]) $ [1..4]))-- @?=
---            [[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+    map toList (choose2 (map fromList.map (:[]) $ [1..4])) @?=
+            [[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]

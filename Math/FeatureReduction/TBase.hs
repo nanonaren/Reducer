@@ -34,15 +34,21 @@ testBase =
       , testCase "complete4" sumC4
       , testCase "complete5" sumC5
       , testCase "complete6" sumC6
+      , testCase "sumL1_2" sumL1_2
+      , testCase "sumL2_3" sumL2_3
+      , testCase "sumL3_3" sumL3_3
+      , testCase "sumL4" sumL4
+      , testCase "sumL5" sumL5
+      , testCase "sumC7" sumC7
       ]
     , testGroup "Penalty Sum"
       [
-        testCase "level1" psumL1
-      , testCase "level2" psumL2
-      , testCase "level3" psumL3
-      , testCase "level4" psumL4
-      , testCase "level5" psumL5
-      , testCase "complete" psumC1
+        testCase "psumL1" testa
+      , testCase "psumL2" testb
+      , testCase "psumL3" testc
+      , testCase "psumL4" testd
+      , testCase "psumL5" teste
+      , testCase "complete" testf
       ]
     ]
 
@@ -62,58 +68,73 @@ prop_phiToPsi_zeroBound = do
       runIdentity (psi (fromList xs) (fromList ys)) >= 0
 
 sumL1 = runIdentity (evalStateT (level1 (samplePsi 50)) sample) @?=
-              [6,7,8,9,10]
+              fromList [6,7,8,9,10]
 
 sumL2_1 =
     runIdentity (evalStateT (level2 (samplePsi 40) (fromList [])) sample) @?=
-    [10,9]
+                fromList [10,9]
 
 sumL2_2 =
-    runIdentity (evalStateT (level2 (samplePsi 30) (fromList [6..10])) sample) @?= []
+    runIdentity (evalStateT (level2 (samplePsi 30) (fromList [6..10])) sample) @?=
+                fromList []
 
 sumL3_1 =
-    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [7..10])) sample) @?= [6]
+    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [7..10])) sample) @?=
+                fromList [6]
 
 sumL3_2 =
-    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [1,8,9,10])) sample) @?= [7]
+    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [1,8,9,10])) sample) @?=
+                fromList [7]
 
 sumC1 =
-    runIdentity (evalStateT (complete (samplePsi 46)) sample) @?= [4..10]
+    runIdentity (evalStateT (complete (samplePsi 46)) sample) @?=
+                fromList [4..10]
 
 sumC2 =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1..10]))) @?= [4..10]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (fromList $ reverse [1..10]))) @?=
+                fromList [4..10]
 
 sumC3 =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo [1,20,10,5,9,2,7])) @?= [7,9,10,20]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (fromList $ [1,20,10,5,9,2,7]))) @?=
+                fromList [7,9,10,20]
 
 sumC4 =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1,20,10,5,9,2,7]))) @?= [7,9,10,20]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (fromList $ reverse [1,20,10,5,9,2,7]))) @?=
+                fromList [7,9,10,20]
 
 sumC5 =
-    runIdentity (evalStateT (complete (samplePsi 55)) (FeatureInfo [1..10])) @?= [1..10]
+    runIdentity (evalStateT (complete (samplePsi 55)) sample) @?=
+                fromList [1..10]
 
 sumC6 =
-    runIdentity (evalStateT (complete (samplePsi 30)) (FeatureInfo [1..10])) @?= [7..10]
+    runIdentity (evalStateT (complete (samplePsi 30)) sample) @?=
+                fromList [7..10]
 
-psumL1 =
-    runIdentity (evalStateT (level1 (samplePsi 20)) (FeatureInfo [1..10])) @?= []
+sumL1_2 =
+    runIdentity (evalStateT (level1 (samplePsi 20)) sample) @?=
+                fromList []
 
-psumL2 =
-    runIdentity (evalStateT (level2 (samplePsi 20) (fromList [])) (FeatureInfo [1..10])) @?= []
+sumL2_3 =
+    runIdentity (evalStateT (level2 (samplePsi 20) (fromList [])) sample) @?=
+                fromList []
 
-psumL3 =
-    runIdentity (evalStateT (leveln (samplePsi 20) 4 (fromList [])) (FeatureInfo [1..10])) @?= []
+sumL3_3 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 4 (fromList [])) sample) @?=
+                fromList []
 
-psumL4 =
-    runIdentity (evalStateT (leveln (samplePsi 20) 8 (fromList [])) (FeatureInfo [1..10])) @?= [10,8]
+sumL4 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 8 (fromList [])) sample) @?=
+                fromList [10,8]
 
-psumL5 =
-    runIdentity (evalStateT (leveln (samplePsi 20) 16 (fromList [8,10])) (FeatureInfo [1..10])) @?= [9]
+sumL5 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 16 (fromList [8,10])) sample) @?=
+                fromList [9]
 
-psumC1 =
-    runIdentity (evalStateT (complete (samplePsi 20)) (FeatureInfo [1..10])) @?= [8,9,10]
+sumC7 =
+    runIdentity (evalStateT (complete (samplePsi 20)) sample) @?=
+                fromList [8,9,10]
 
-sample = FeatureInfo {allFS = [1..10]}
+sample = FeatureInfo {allFS = fromList [1..10]}
 samplePhi :: Double -> Features -> Identity Value
 samplePhi n = return.pick.fromIntegral.sum.toList
     where pick x | x > n = n
@@ -121,22 +142,28 @@ samplePhi n = return.pick.fromIntegral.sum.toList
 samplePsi n = phiToPsi (samplePhi n)
 
 testa =
-    runIdentity (evalStateT (level1 (samplePsi2 46)) (FeatureInfo [1..10])) == []
+    runIdentity (evalStateT (level1 (samplePsi2 46)) sample) @?=
+                fromList []
 
 testb =
-    runIdentity (evalStateT (level2 (samplePsi2 46) (fromList [])) (FeatureInfo [1..10])) == [10]
+    runIdentity (evalStateT (level2 (samplePsi2 46) (fromList [])) sample) @?=
+                fromList [10]
 
 testc =
-    runIdentity (evalStateT (leveln (samplePsi2 46) 4 (fromList [10])) (FeatureInfo [1..10])) == [9,8]
+    runIdentity (evalStateT (leveln (samplePsi2 46) 4 (fromList [10])) sample) @?=
+                fromList [9,8]
 
 testd =
-    runIdentity (evalStateT (leveln (samplePsi2 46) 8 (fromList [8,9,10])) (FeatureInfo [1..10])) == [6,7]
+    runIdentity (evalStateT (leveln (samplePsi2 46) 8 (fromList [8,9,10])) sample) @?=
+                fromList [6,7]
 
 teste =
-    runIdentity (evalStateT (leveln (samplePsi2 46) 16 (fromList [6,7,8,9,10])) (FeatureInfo [1..10])) == []
+    runIdentity (evalStateT (leveln (samplePsi2 46) 16 (fromList [6,7,8,9,10])) sample) @?=
+                fromList []
 
 testf =
-    runIdentity (evalStateT (complete (samplePsi2 46)) (FeatureInfo [1..10])) == [6..10]
+    runIdentity (evalStateT (complete (samplePsi2 46)) sample) @?=
+                fromList [6..10]
 
 samplePhi2 :: Int -> Features -> Identity Value
 samplePhi2 n = return.fromIntegral.penalize.sum.toList
