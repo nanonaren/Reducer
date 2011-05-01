@@ -19,7 +19,8 @@ testBase = do
                       test_complete_one,test_complete_two,
                       test_complete_three,test_complete_four,
                       test_complete_five,test_complete_six,
-                      test1,test2,test3,test4,test5,test6]
+                      test1,test2,test3,test4,test5,test6,
+                      testa,testb,testc,testd,teste,testf]
   return.and $ os ++ xs
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
@@ -97,3 +98,30 @@ samplePhi n = return.pick.fromIntegral.sum.toList
     where pick x | x > n = n
                  | otherwise = x
 samplePsi n = phiToPsi (samplePhi n)
+
+testa =
+    runIdentity (evalStateT (level1 (samplePsi2 46)) (FeatureInfo [1..10])) == []
+
+testb =
+    runIdentity (evalStateT (level2 (samplePsi2 46) (fromList [])) (FeatureInfo [1..10])) == [10]
+
+testc =
+    runIdentity (evalStateT (leveln (samplePsi2 46) 4 (fromList [10])) (FeatureInfo [1..10])) == [9,8]
+
+testd =
+    runIdentity (evalStateT (leveln (samplePsi2 46) 8 (fromList [8,9,10])) (FeatureInfo [1..10])) == [6,7]
+
+teste =
+    runIdentity (evalStateT (leveln (samplePsi2 46) 16 (fromList [6,7,8,9,10])) (FeatureInfo [1..10])) == []
+
+testf =
+    runIdentity (evalStateT (complete (samplePsi2 46)) (FeatureInfo [1..10])) == [6..10]
+
+samplePhi2 :: Int -> Features -> Identity Value
+samplePhi2 n = return.fromIntegral.penalize.sum.toList
+    where pick x | x > n = n
+                 | otherwise = x
+          penalize v = if v-n > 0
+                       then if v-n > n then 0 else n - (v-n)
+                       else v
+samplePsi2 n = phiToPsi (samplePhi2 n)
