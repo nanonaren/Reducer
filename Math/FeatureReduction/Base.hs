@@ -45,28 +45,22 @@ phiToPsi phi =
 level1 :: Monad m => Psi m -> St m [Int]
 level1 psi = do
   allfs <- gets allFS
-  xs <- psiMap psi $ map (:[]) allfs
-  let (nonZeros,_) = mapHomTup (map fst).partition ((>0).snd) $ xs
+  nonZeros <- evalAndPart psi $ map (:[]) allfs
   return (concat nonZeros)
 
 -- |Level 2
 level2 :: Monad m => Psi m -> Features -> St m [Int]
 level2 psi ireds = do
   fs <- complement ireds
-  allfs <- gets (fromList.allFS)
-  let fsLst = toList fs
-  xs <- psiMap psi $ choose2 fsLst
-  let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
-      counts = countMap (concat nonZeros)
+  nonZeros <- evalAndPart psi $ choose2 (toList fs)
+  let counts = countMap (concat nonZeros)
   return $ stuff nonZeros counts
 
 -- |level n, n > 2
 leveln :: Monad m => Psi m -> Int -> Features -> St m [Int]
 leveln psi n ireds = do
   fs <- complement ireds
-  allfs <- gets (fromList.allFS)
-  xs <- psiMap psi.map concat.choose2.chunk (div n 2).toList $ fs
-  let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
+  nonZeros <- evalAndPart psi.map concat.choose2.chunk (div n 2).toList $ fs
   mapM (irreds psi) nonZeros >>= picks psi.concat
 
 complete :: Monad m => Psi m -> St m [Int]
@@ -88,10 +82,17 @@ stopAlg psi ireds = do
   comp <- complement ireds
   lift (psi allfs comp) >>= return.(==0)
 
+-- | set complement of X in F
 complement :: Monad m => Features -> St m Features
 complement ireds = do
   allfs <- gets (fromList.allFS)
   return $ diff allfs ireds
+
+-- |Apply psi to list and partition into zero and non-zero
+evalAndPart :: Monad m => Psi m -> [[Int]] -> St m [[Int]]
+evalAndPart psi xss = do
+  xs <- psiMap psi xss
+  return.map fst.fst.partition ((>0).snd) $ xs
 
 -- |Pick from a list of irreds
 picks :: Monad m => Psi m -> [[Int]] -> St m [Int]
