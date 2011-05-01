@@ -2,15 +2,19 @@ module Math.FeatureReduction.Features
     (
       Features
     , diff
+    , union
     , delete
     , size
     , toList
     , fromList
+    , chunk
+    , choose2
     ) where
 
 import qualified Data.BitSet as B
 import Data.List (foldl')
 import Data.Bits
+import qualified NanoUtils.List as L (chunk)
 
 {- 
 ******* NOTE **********
@@ -20,6 +24,32 @@ The ints must be >= 1
 
 newtype Features = Features (B.BitSet Int)
     deriving (Eq,Show)
+
+chunk :: Int -> [Features] -> [Features]
+chunk n = map unions.L.chunk n
+
+choose2 :: [Features] -> [Features]
+choose2 = map unions.choose2'
+
+-- |Special choose 2, because if only one elem it will return it
+-- I need it to work like this
+-- TODO: avoid length
+choose2' xs
+    | length xs == 1 = [xs]
+    | otherwise = choose2'' xs
+choose2'' [] = []
+choose2'' (x:xs) = [[x,y]|y<-xs] ++ choose2'' xs
+
+unions :: [Features] -> Features
+unions = foldl' union (fromList [])
+
+-- |features1 union features2
+-- eg: 1010 union 0110 = 1110
+union :: Features -> Features -> Features
+union (Features f1) (Features f2) =
+    Features $ B.unsafeFromIntegral (f1' .|. f2')
+    where f1' = B.toIntegral f1 :: Integer
+          f2' = B.toIntegral f2 :: Integer
 
 -- |features1 - features2
 -- eg: 1010 - 0010 = 1000

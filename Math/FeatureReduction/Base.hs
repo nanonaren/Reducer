@@ -16,7 +16,7 @@ import Data.List (partition,intersect,splitAt,maximumBy)
 import Data.Function (on)
 import qualified Data.Map as M
 import Data.Functor.Identity
-import Math.FeatureReduction.Features
+import Math.FeatureReduction.Features hiding (choose2,chunk)
 import NanoUtils.Container (foldMapM)
 import NanoUtils.Tuple
 import NanoUtils.List (pairUp,leaveOneOuts,chunk)
