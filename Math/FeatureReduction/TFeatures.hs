@@ -5,12 +5,16 @@ module Math.FeatureReduction.TFeatures
 
 import Math.FeatureReduction.Features
 import Data.List ((\\),sort,nub)
+import Test.Framework (testGroup)
+import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.QuickCheck
-import Test.QuickCheck.Test
 
-testFeatures =
-    fmap and $
-    mapM (fmap isSuccess.quickCheckResult) [prop_id,prop_diff,prop_size]
+testFeatures = [testGroup "Features"
+               [
+                 testProperty "convert to and from" prop_id
+               , testProperty "diff" prop_diff
+               , testProperty "size" prop_size
+               ]]
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
 

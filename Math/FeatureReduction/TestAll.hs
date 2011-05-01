@@ -5,11 +5,8 @@ module Main
 
 import Math.FeatureReduction.TFeatures
 import Math.FeatureReduction.TBase
-import System.Exit
+import Test.Framework (defaultMain, testGroup)
 
-main = do
-  b <- fmap and $ sequence [testFeatures,testBase]
-  case b of
-    True -> exitSuccess
-    False -> exitFailure
+main = defaultMain tests
 
+tests = testFeatures ++ testBase

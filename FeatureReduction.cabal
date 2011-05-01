@@ -48,7 +48,7 @@ Library
   Exposed-modules:     Math.FeatureReduction.Base
   
   -- Packages needed in order to build this package.
-  Build-depends:     base, bitset >= 1.1, QuickCheck >= 2.0, mtl >= 2.0, transformers >= 0.2, NanoUtils >= 0.1, containers >= 0.4
+  Build-depends:     base, bitset >= 1.1, mtl >= 2.0, transformers >= 0.2, NanoUtils >= 0.1, containers >= 0.4
   
   -- Modules not exported by this package.
   -- Other-modules:       
@@ -58,4 +58,5 @@ Library
 
 Executable test
   Main-Is: Math/FeatureReduction/TestAll.hs
-  Other-modules: Math.FeatureReduction.Base
+  Build-depends: test-framework >= 0.3.3, HUnit >= 1.2, QuickCheck >= 2.4, test-framework-quickcheck2 >= 0.2, test-framework-hunit >= 0.2
+  Other-modules:
