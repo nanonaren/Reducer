@@ -17,7 +17,9 @@ testBase = do
   os <- mapM runOnce [test_level1,test_level2_one,test_level2_two,
                       test_level3_one,test_level3_two,
                       test_complete_one,test_complete_two,
-                      test_complete_three,test_complete_four]
+                      test_complete_three,test_complete_four,
+                      test_complete_five,test_complete_six,
+                      test1,test2,test3,test4,test5,test6]
   return.and $ os ++ xs
 
 genInts = fmap (sort.nub) $ listOf (choose (1,100))
@@ -36,32 +38,56 @@ prop_phiToPsi_zeroBound = do
       runIdentity (psi (fromList xs) (fromList ys)) >= 0
 
 test_level1 = runIdentity (evalStateT (level1 (samplePsi 50)) sample) ==
-              (fromList [6,7,8,9,10],fromList [1..5])
+              [6,7,8,9,10]
 
 test_level2_one =
-    runIdentity (evalStateT (level2 (samplePsi 40) (fromList [1..10])) sample) ==
+    runIdentity (evalStateT (level2 (samplePsi 40) (fromList [])) sample) ==
     [10,9]
 
 test_level2_two =
-    runIdentity (evalStateT (level2 (samplePsi 30) (fromList [1..5])) sample) == []
+    runIdentity (evalStateT (level2 (samplePsi 30) (fromList [6..10])) sample) == []
 
 test_level3_one =
-    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [1..6])) sample) == [6]
+    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [7..10])) sample) == [6]
 
 test_level3_two =
-    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [2..7])) sample) == [7]
+    runIdentity (evalStateT (leveln (samplePsi 40) 4 (fromList [1,8,9,10])) sample) == [7]
 
 test_complete_one =
-    runIdentity (evalStateT (complete (samplePsi 46)) sample) == [10,9,8,7,6,5,4]
+    runIdentity (evalStateT (complete (samplePsi 46)) sample) == [4..10]
 
 test_complete_two =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1..10]))) == [10,9,8,7,6,5,4]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1..10]))) == [4..10]
 
 test_complete_three =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo [1,20,10,5,9,2,7])) == [9,10,20,7]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo [1,20,10,5,9,2,7])) == [7,9,10,20]
 
 test_complete_four =
-    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1,20,10,5,9,2,7]))) == [9,10,20,7]
+    runIdentity (evalStateT (complete (samplePsi 46)) (FeatureInfo (reverse [1,20,10,5,9,2,7]))) == [7,9,10,20]
+
+test_complete_five =
+    runIdentity (evalStateT (complete (samplePsi 55)) (FeatureInfo [1..10])) == [1..10]
+
+test_complete_six =
+    runIdentity (evalStateT (complete (samplePsi 30)) (FeatureInfo [1..10])) == [7..10]
+
+test1 =
+    runIdentity (evalStateT (level1 (samplePsi 20)) (FeatureInfo [1..10])) == []
+
+test2 =
+    runIdentity (evalStateT (level2 (samplePsi 20) (fromList [])) (FeatureInfo [1..10])) == []
+
+test3 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 4 (fromList [])) (FeatureInfo [1..10])) == []
+
+test4 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 8 (fromList [])) (FeatureInfo [1..10])) == [10,8]
+
+test5 =
+    runIdentity (evalStateT (leveln (samplePsi 20) 16 (fromList [8,10])) (FeatureInfo [1..10])) == [9]
+
+test6 =
+    runIdentity (evalStateT (complete (samplePsi 20)) (FeatureInfo [1..10])) == [8,9,10]
 
 runOnce = fmap isSuccess.quickCheckWithResult (stdArgs{maxSuccess=1})
 
