@@ -45,10 +45,9 @@ phiToPsi phi =
 level1 :: Monad m => Psi m -> St m [Int]
 level1 psi = do
   allfs <- gets allFS
-  let fs = fromList allfs
-  xs <- lift.mapM (\f -> liftM (f,).psi fs.fromList.(:[]) $ f) $ allfs --R
+  xs <- psiMap psi $ map (:[]) allfs
   let (nonZeros,_) = mapHomTup (map fst).partition ((>0).snd) $ xs
-  return nonZeros
+  return (concat nonZeros)
 
 -- |Level 2
 level2 :: Monad m => Psi m -> Features -> St m [Int]
@@ -56,7 +55,7 @@ level2 psi ireds = do
   fs <- complement ireds
   allfs <- gets (fromList.allFS)
   let fsLst = toList fs
-  xs <- psiMap psi $ choose2 fsLst --R
+  xs <- psiMap psi $ choose2 fsLst
   let (nonZeros,zeros) = mapHomTup (map fst).partition ((>0).snd) $ xs
       counts = countMap (concat nonZeros)
   return $ stuff nonZeros counts
