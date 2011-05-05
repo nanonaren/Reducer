@@ -4,10 +4,9 @@ module Main
       main
     ) where
 
-import ChineseRem (divisorSearch2)
-import ChineseRem.Set (run)
-import ChineseRem.IndepSet
-import ListUtils (rsortOn)
+import Math.FeatureReduction.Features
+import NanoUtils.List (rsortOn)
+import NanoUtils.Tuple (swap)
 
 import Control.Monad.State
 import Data.Maybe (fromJust)
@@ -39,6 +38,8 @@ data LCA = LCA
     , rp :: (Handle,Handle)
     , names :: M.Map String Int
     , revNames :: M.Map Int String
+    , toFeatures :: [Int] -> Features
+    , fromFeatures :: Features -> [Int]
     , root :: Int
     }
 
@@ -48,6 +49,8 @@ lca = LCA
   , rp = (stdin,stdout)
   , names = M.empty
   , revNames = M.empty
+  , toFeatures = undefined
+  , fromFeatures = undefined
   , root = 0
   }
 
@@ -55,49 +58,20 @@ type St = StateT LCA IO
 
 opts = Options
   {
-    maxFits = 197
-  , dataFile = "/home/narens/work/lca/data/allnodes.tab"
+    maxFits = 198
+  , dataFile = "/home/narens/work/chinese/data/allnodes.tab"
   , nnlsPath = "/home/narens/Downloads/nnls"
   , rscriptPath = "/usr/bin/Rscript"
-  , rootNode = "10158"
+  , rootNode = "7063"
   , delta = 0.15
   , mustInclude = "/home/narens/work/lca/data/76names.tab"
   , numRandomNodes = 0
   , namesFile = "/home/narens/work/lca/data/allnames.tab"
   }
 
-instance Reserved Int where
-    reserved = 0
-
 main = do
-  st <- execStateT (setupR >> setupNodes) lca
-  finder <- create sampler 1 (M.elems.M.delete (rootNode opts).names $ st)
-  res <- flip evalStateT st.run (doIt 1) $ finder
-  putStrLn.show.rsortOn snd.M.toList $ res
-
-doIt n = do
-  dss <- sequence (replicate n $ divisorSearch2 (S.fromList []))
-  return.foldl' (M.unionWith (+)) M.empty $ dss
-
-sampler :: S.Set Int -> S.Set Int -> St (MDist Int)
-sampler iden a = do
-  liftIO.putStrLn.show $ "HELLO, I am in the sampler"
-  root <- gets root
-  mfits <- gets (fromIntegral.maxFits.options)
-  (fits,cs) <- nnls root (S.toList a)
-  let rem = S.difference iden a
-      remList = S.toList rem
-      p = fromIntegral fits/mfits
-      shared = (1-p) / fromIntegral (S.size rem)
-      ashared = p / fromIntegral (S.size a)
-      dist = M.fromList $ map (,ashared) (S.toList a) ++ map (,shared) remList
---      dist = M.fromList $ fromCoeffs a p cs ++ map (,shared) remList
-  liftIO.putStrLn.show $ "Remainder " ++ show remList ++ " got "
-                         ++ show shared ++ " FITS: " ++ show fits
-  --liftIO.putStrLn.show $ dist
-  return dist
-
-fromCoeffs a p = zip (S.toList a).map (*p).normalize
+  val <- evalStateT (setupR >> setupNodes >> setupFeatures >> phi (fromList [1..70])) lca
+  print val
 
 setupNodes :: St ()
 setupNodes = do
@@ -112,12 +86,31 @@ setupNodes = do
       randNodes = take (numRandomNodes st) $
                   shuffle' notRequired (length notRequired) gen
       names = M.filterWithKey (\k _ -> elem k mustInc || elem k randNodes) allnms
-      revNames = M.fromList.map (\(a,b) -> (b,a)).M.toList $ names
+      revNames = M.fromList.map swap.M.toList $ names
       rootNum = fromJust.M.lookup (rootNode st) $ names
-  modify (\s -> s{names=names,revNames=revNames,root=rootNum})
+      names' = M.delete (rootNode st) names
+      revNames' = M.delete rootNum revNames
+  modify (\s -> s{names=names',revNames=revNames',root=rootNum})
 
+-- Call only after setupNodes
+setupFeatures :: St ()
+setupFeatures = do
+  st <- get
+  ks <- gets (M.keys.revNames)
+  let fToLn = M.fromList.zip [1..] $ ks
+      lnToF = M.fromList.map swap.M.toList $ fToLn
+  put st{toFeatures=fromList.map (fromJust.flip M.lookup lnToF),
+         fromFeatures=map (fromJust.flip M.lookup fToLn).toList}
 
-nnls :: Int -> [Int] -> St (Int,[Double])
+phi :: Features -> St Double
+phi fs = do
+  xs <- gets (($fs).fromFeatures)
+  liftIO (print xs)
+  root <- gets root
+  (v,_) <- nnls root xs
+  return v
+
+nnls :: Int -> [Int] -> St (Double,[Double])
 nnls root xs = do
   (inp,out) <- gets rp
   maxfits <- gets (maxFits.options)
@@ -134,15 +127,14 @@ nnlscode factors children root =
     "children <- t(m[c(" ++ toRarr children ++ "),])[c(" ++
                          toRarr factors ++ "),]\n" ++
     "n <- nnls(children, parent)\n" ++
-    "cnt=0;\n" ++
-    "for (i in 1:length(parent))\n" ++
-    "{\n" ++
-    "d <- abs(n$residuals[i] / parent[i])\n" ++
-    "if (d < 0.15)\n" ++
-    "{\n" ++ 
-    "cnt=cnt+1;\n" ++
-    "}\n}\n" ++
-    "cat(cnt);\n" ++
+    "rv = 0;clen = length(children[1,]);\n" ++
+    "for (i in 1:clen){rv = rv + n$x[i] * t(children)[i,]}\n" ++ 
+    "di = 0\n" ++
+    "for (i in 1:length(parent)){di = di + (parent[i]-rv[i])^2}\n" ++
+    "dip=0\n" ++
+    "for (i in 1:length(parent)){dip = dip + (parent[i])^2}\n" ++
+    "val = (dip-di)/dip; cat(val);\n" ++
+
     "for(i in 1:length(n$x))\n" ++
     "{\n" ++
     "cat(' ');\n" ++
