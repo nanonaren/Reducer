@@ -82,6 +82,9 @@ stopAlg ireds = do
   comp <- complement ireds
   evalPsi allfs comp >>= return.(==0)
 
+evalPhi :: Monad m => Features -> St m Value
+evalPhi fs = gets phi >>= \f -> lift (f fs)
+
 evalPsi :: Monad m => Features -> Features -> St m Value
 evalPsi context x = do
   f <- gets psi
@@ -105,11 +108,10 @@ picks xss = do
   liftM (add (fst p)).picks $ filter (not.member (fst p)) xss
 
 -- |Pick an element from an irreducible
--- TODO: change to phi *NOT* psi
 pick :: Monad m => Features -> St m (Int,Double)
 pick xs = do
-  ls <- mapM (evalPsi (fromList [])).split 1 $ xs
-  return.maximumBy (compare `on` snd).zip (toList xs).map (*(-1)) $ ls
+  ls <- mapM evalPhi.split 1 $ xs
+  return.maximumBy (compare `on` snd).zip (toList xs) $ ls
 
 -- |Get a single irreducible
 irred :: Monad m => Features -> St m Features
