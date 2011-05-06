@@ -89,7 +89,7 @@ sumC1 =
     runIdentity (evalStateT complete (sample 46)) @?=
                 fromList [4..10]
 
-sample3 n = FeatureInfo {allFS = fromList [1,20,10,5,9,2,7],phi=samplePhi n,psi=samplePsi n,foundIrreducible=undefined}
+sample3 n = FeatureInfo {allFS = fromList [1,20,10,5,9,2,7],phi=samplePhi n,psi=samplePsi n,foundIrreducible=dummy}
 sumC3 =
     runIdentity (evalStateT complete (sample3 46)) @?=
                 fromList [7,9,10,20]
@@ -129,7 +129,7 @@ sumC7 =
     runIdentity (evalStateT complete (sample 20)) @?=
                 fromList [8,9,10]
 
-sample n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi n,psi=samplePsi n,foundIrreducible=undefined}
+sample n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi n,psi=samplePsi n,foundIrreducible=dummy}
 samplePhi :: Double -> Features -> Identity Value
 samplePhi n = return.pick.fromIntegral.sum.toList
     where pick x | x > n = n
@@ -160,7 +160,7 @@ testf =
     runIdentity (evalStateT complete (sample2 46)) @?=
                 fromList [6..10]
 
-sample2 n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi2 n,psi=samplePsi2 n,foundIrreducible=undefined}
+sample2 n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi2 n,psi=samplePsi2 n,foundIrreducible=dummy}
 samplePhi2 :: Int -> Features -> Identity Value
 samplePhi2 n = return.fromIntegral.penalize.sum.toList
     where pick x | x > n = n
@@ -169,3 +169,5 @@ samplePhi2 n = return.fromIntegral.penalize.sum.toList
                        then if v-n > n then 0 else n - (v-n)
                        else v
 samplePsi2 n = phiToPsi (samplePhi2 n)
+
+dummy _ _ = return ()

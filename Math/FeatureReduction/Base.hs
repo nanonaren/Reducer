@@ -111,7 +111,10 @@ picks xss = do
 pick :: Monad m => Features -> St m (Int,Double)
 pick xs = do
   ls <- mapM evalPhi.split 1 $ xs
-  return.maximumBy (compare `on` snd).zip (toList xs) $ ls
+  let (x,v) = maximumBy (compare `on` snd).zip (toList xs) $ ls
+  f <- gets foundIrreducible
+  lift (f xs x)
+  return (x,v)
 
 -- |Get a single irreducible
 irred :: Monad m => Features -> St m Features
