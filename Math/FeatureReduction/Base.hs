@@ -9,10 +9,11 @@ module Math.FeatureReduction.Base
     , leveln
     , complete
     , irreds
+    , runReducer
     ) where
 
 import Control.Monad.State
-import Data.List (partition,intersect,splitAt,maximumBy)
+import Data.List (partition,intersect,splitAt,maximumBy,minimumBy)
 import Data.Function (on)
 import qualified Data.Map as M
 import Data.Functor.Identity
@@ -24,15 +25,21 @@ import NanoUtils.List (pairUp)
 data FeatureInfo m = FeatureInfo
     {
       allFS :: Features
+    , workingSet :: Features
     , phi :: Features -> m Value
     , psi :: Features -> Features -> m Value
     , foundIrreducible :: Features -> Int -> m ()
+    , info :: String -> m ()
     }
 
 type St m = StateT (FeatureInfo m) m
 type Value = Double
 type Phi m = Features -> m Value
 type Psi m = Features -> Features -> m Value
+
+-- |Run reducer
+runReducer :: Monad m => St m a -> FeatureInfo m -> m a
+runReducer action st = evalStateT action st
 
 -- |Construct the Psi function
 phiToPsi :: Monad m => Phi m -> Psi m
@@ -45,23 +52,40 @@ phiToPsi phi =
 level1 :: Monad m => St m Features
 level1 = do
   allfs <- gets allFS
+  call <- gets foundIrreducible
   nonZeros <- evalAndPart.split 1 $ allfs
-  return (unions nonZeros)
+  lift $ mapM_ (\fs -> call fs (head $ toList fs)) nonZeros
+  let ws = unions nonZeros
+  addToWorkingSet ws
+  return ws
 
 -- |Level 2
 level2 :: Monad m => Features -> St m Features
 level2 ireds = do
   fs <- complement ireds
+  call <- gets foundIrreducible
   nonZeros <- evalAndPart.choose2.split 1 $ fs
   let counts = countMap (concat.map toList $ nonZeros)
-  return $ stuff nonZeros counts
+      fs = stuff nonZeros counts
+  lift $ mapM_ (\x -> call (fromList [x]) x) (toList fs)
+  addToWorkingSet fs
+  return $ fs
 
 -- |level n, n > 2
 leveln :: Monad m => Int -> Features -> St m Features
 leveln n ireds = do
   fs <- complement ireds
   nonZeros <- evalAndPart.choose2.split (div n 2) $ fs
-  mapM irreds nonZeros >>= picks.concat
+  inf <- gets info
+  lift (inf.show.length $ nonZeros)
+  ps <- mapM irreds nonZeros >>= picks.concat
+  addToWorkingSet ps
+  return ps
+
+addToWorkingSet :: Monad m => Features -> St m ()
+addToWorkingSet fs = do
+  ws <- gets workingSet
+  modify (\st -> st{workingSet = union ws fs})
 
 complete :: Monad m => St m Features
 complete = complete' (fromList []) 0
@@ -110,8 +134,11 @@ picks xss = do
 -- |Pick an element from an irreducible
 pick :: Monad m => Features -> St m (Int,Double)
 pick xs = do
-  ls <- mapM evalPhi.split 1 $ xs
-  let (x,v) = maximumBy (compare `on` snd).zip (toList xs) $ ls
+  allfs <- gets allFS
+  ws <- gets workingSet
+  ls <- mapM (\x -> complement (union ws x) >>= evalPsi allfs).split 1 $ xs
+  let (x,v) = minimumBy (compare `on` snd).zip (toList xs) $ ls
+  if v == 0 then error (show (x,v) ++ "DONE!") else return 0
   f <- gets foundIrreducible
   lift (f xs x)
   return (x,v)
@@ -123,11 +150,13 @@ irred xs = irreds xs >>= return.head
 -- |Get all irreducibles
 irreds :: Monad m => Features -> St m [Features]
 irreds xs = do
+  call <- gets foundIrreducible
+  inf <- gets info
   cands <- psiMap (leaveOneOuts xs) >>=
            return.map fst.filter ((>0).snd)
   case cands of
-    [] -> return [xs]
-    xs -> foldMapM irreds cands
+    [] -> lift (call xs 1) >> return [xs]
+    _ -> lift (inf "hello") >> irreds (head cands) --foldMapM irreds cands
 
 psiMap :: Monad m => [Features] -> St m [(Features,Double)]
 psiMap xs = do

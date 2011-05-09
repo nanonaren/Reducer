@@ -13,6 +13,8 @@ module Math.FeatureReduction.Features
     , split
     , choose2
     , leaveOneOuts
+    , toNumber
+    , fromNumber
     ) where
 
 import qualified Data.BitSet as B
@@ -31,6 +33,12 @@ newtype Features = Features (B.BitSet Int)
 
 instance Eq Features where
     f1 == f2 = toList f1 == toList f2
+
+toNumber :: Features -> Integer
+toNumber (Features bs) = B.toIntegral bs
+
+fromNumber :: Integer -> Features
+fromNumber num = Features $ B.unsafeFromIntegral num
 
 add :: Int -> Features -> Features
 add i fs = union fs (fromList [i])

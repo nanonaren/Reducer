@@ -4,12 +4,13 @@ module Main
       main
     ) where
 
+import Math.FeatureReduction.Base
 import Math.FeatureReduction.Features
-import NanoUtils.List (rsortOn)
+import NanoUtils.List (rsortOn,sortOn)
 import NanoUtils.Tuple (swap)
 
 import Control.Monad.State
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust,isNothing)
 import Data.List
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -18,6 +19,10 @@ import System.IO
 import System.Process (runInteractiveCommand)
 import System.Random
 import System.Random.Shuffle (shuffle')
+
+import qualified Network.Memcache as C
+import Network.Memcache.Protocol
+import Pipes
 
 data Options = Options
     {
@@ -41,6 +46,8 @@ data LCA = LCA
     , toFeatures :: [Int] -> Features
     , fromFeatures :: Features -> [Int]
     , root :: Int
+    , server :: Server
+    , pipes :: Pipes
     }
 
 lca = LCA
@@ -52,6 +59,8 @@ lca = LCA
   , toFeatures = undefined
   , fromFeatures = undefined
   , root = 0
+  , server = undefined
+  , pipes = undefined
   }
 
 type St = StateT LCA IO
@@ -62,16 +71,42 @@ opts = Options
   , dataFile = "/home/narens/work/chinese/data/allnodes.tab"
   , nnlsPath = "/home/narens/Downloads/nnls"
   , rscriptPath = "/usr/bin/Rscript"
-  , rootNode = "7063"
+  , rootNode = "7064"
   , delta = 0.15
   , mustInclude = "/home/narens/work/lca/data/76names.tab"
   , numRandomNodes = 0
   , namesFile = "/home/narens/work/lca/data/allnames.tab"
   }
 
+sampleState = FeatureInfo
+  {
+    allFS = fromList [1..75]
+  , workingSet = fromList []
+  , phi = myPhi
+  , psi = phiToPsi myPhi
+  , foundIrreducible = myFoundIrreducible
+  , info = myInfo
+  }
+
+myInfo = liftIO.putStrLn
+
 main = do
-  val <- evalStateT (setupR >> setupNodes >> setupFeatures >> phi (fromList [1..70])) lca
-  print val
+--  val <- evalStateT (setupCache >> setupR >> setupNodes >>
+--                     setupFeatures >> fromNodeNames [271,364,1844,308,1171,7218,9272] >>= \f1 ->
+--                     fromNodeNames [271,1110,364,1844,6652,308,693] >>= \f2 ->
+--                     myPhiMap (f1:f2:[])) lca
+--  print val
+  fs <- evalStateT (setupCache >> setupR >> setupNodes >>
+                    setupFeatures >> runReducer complete sampleState >>=
+                    toNodeNames) lca
+  print fs
+
+
+setupCache :: St ()
+setupCache = do
+  st <- get
+  srvr <- liftIO $ connect "localhost" 11211
+  put st{server = srvr}
 
 setupNodes :: St ()
 setupNodes = do
@@ -102,25 +137,96 @@ setupFeatures = do
   put st{toFeatures=fromList.map (fromJust.flip M.lookup lnToF),
          fromFeatures=map (fromJust.flip M.lookup fToLn).toList}
 
-phi :: Features -> St Double
-phi fs = do
-  xs <- gets (($fs).fromFeatures)
-  liftIO (print xs)
-  root <- gets root
-  (v,_) <- nnls root xs
-  return v
+fromNodeNames :: [Int] -> St Features
+fromNodeNames xs = do
+  nmap <- gets names
+  f <- gets toFeatures
+  return.f.map (fromJust.flip M.lookup nmap) $ map show xs
 
-nnls :: Int -> [Int] -> St (Double,[Double])
-nnls root xs = do
-  (inp,out) <- gets rp
+toNodeNames :: Features -> St [Int]
+toNodeNames fs = do
+  lns <- gets (($fs).fromFeatures)
+  revN <- gets revNames
+  return $ map (read.fromJust.flip M.lookup revN) lns
+
+myPhiMap :: [Features] -> St [Double]
+myPhiMap fss = do
+  root <- gets root
+  fromFS <- gets fromFeatures
+  (other,cached) <- fmap (partition (isNothing.snd)).
+                    mapM (\(i,fs) -> lookupCache fs >>= return.((i,fs),)).
+                    zip [1..] $ fss
+  let (ids,xss) = unzip.fst.unzip $ other
+      cached' = map (\((i,_),v) -> (i,fromJust v)) cached
+  vals <- fmap (fst.unzip).nnlsMap root.map fromFS $ xss
+  mapM_ (uncurry putInCache) $ zip xss vals
+  return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
+
+-- myPhi :: Features -> St Double
+-- myPhi fs = do
+--   root <- gets root
+--   xs <- gets (($fs).fromFeatures)
+--   val <- lookupCache fs
+--   case val of
+--     Just v -> return v
+--     Nothing -> do
+--              (v,_) <- nnls root xs
+--              liftIO (print xs)
+--              putInCache fs v
+--              return v
+myPhi fs = fmap head $ myPhiMap (fs:[])
+
+putInCache :: Features -> Double -> St ()
+putInCache fs val = do
+  root <- gets root
+  srvr <- gets server
+  liftIO $ C.set srvr (getKey root fs) (show val)
+  return ()
+
+lookupCache :: Features -> St (Maybe Double)
+lookupCache fs
+    | size fs == 0 = return (Just 0)
+    | otherwise = do
+  root <- gets root
+  srvr <- gets server
+  liftIO.fmap (fmap read) $ C.get srvr (getKey root fs)
+
+getKey :: Int -> Features -> String
+getKey root fs = show root ++ show (toNumber fs)
+
+myFoundIrreducible :: Features -> Int -> St ()
+myFoundIrreducible fs chosen = do
+  fs' <- toNodeNames fs
+  (c:_)  <-  toNodeNames (fromList [chosen])
+  liftIO $ do
+    putStrLn $ "Chose " ++ show c ++ " in " ++ show fs'
+    putStrLn "Wating for key..."
+    getChar
+    putStrLn "Continuing"
+
+nnlsMap :: Int -> [[Int]] -> St [(Double,[Double])]
+nnlsMap root xss = do
+  ps <- gets pipes
   maxfits <- gets (maxFits.options)
-  let cmd = nnlscode [1..maxfits] xs root
-  liftIO $ hPutStr inp cmd
-  ln <- liftIO (skipStupidLines out)
-  let ws = words ln
-      numFits = read.head $ ws
-      coeffs = map read.tail $ ws
-  return (numFits,coeffs)
+  let cmds = map (\xs -> nnlscode [1..maxfits] xs root) xss
+  liftIO $ pushMap ps handler cmds
+    where handler h = skipStupidLines h >>= \ln ->
+                      let ws = words ln
+                          numFits = read.head $ ws
+                          coeffs = map read.tail $ ws
+                      in return (numFits,coeffs)
+
+-- nnls :: Int -> [Int] -> St (Double,[Double])
+-- nnls root xs = do
+--   (inp,out) <- gets rp
+--   maxfits <- gets (maxFits.options)
+--   let cmd = nnlscode [1..maxfits] xs root
+--   liftIO $ hPutStr inp cmd
+--   ln <- liftIO (skipStupidLines out)
+--   let ws = words ln
+--       numFits = read.head $ ws
+--       coeffs = map read.tail $ ws
+--   return (numFits,coeffs)
 
 nnlscode factors children root =
     "parent <- t(m[" ++ show root ++ ",])[c(" ++ toRarr factors ++ "),]\n" ++
@@ -144,19 +250,27 @@ nnlscode factors children root =
 
 setupR :: St ()
 setupR = do
-  rp <- setupR'
-  modify (\s -> s{rp=rp})
-
-setupR' :: St (Handle,Handle)
-setupR' = do
+  ps <- liftIO initPipes
   file <- gets (dataFile.options)
   nnlsPath <- gets (nnlsPath.options)
   rscriptPath <- gets (rscriptPath.options)
-  (inp,out,_,_) <- liftIO $ runInteractiveCommand (rscriptPath ++ " --vanilla -")
-  liftIO $ hSetBuffering inp NoBuffering
-  liftIO $ hSetBuffering out NoBuffering
-  liftIO $ hPutStr inp (setupCode nnlsPath file)
-  return (inp,out)
+  liftIO $ do
+--    addShellPipe ps (rscriptPath ++ " --vanilla -")
+    addShellPipe ps ("ssh `cat ~/ip` '" ++ rscriptPath ++ " --vanilla -" ++ "'")
+    let scode = setupCode nnlsPath file
+    pushMap ps (\_ -> return ()) [scode]
+  modify (\s -> s{pipes=ps})
+
+-- setupR' :: St (Handle,Handle)
+-- setupR' = do
+--   file <- gets (dataFile.options)
+--   nnlsPath <- gets (nnlsPath.options)
+--   rscriptPath <- gets (rscriptPath.options)
+--   (inp,out,_,_) <- liftIO $ runInteractiveCommand (rscriptPath ++ " --vanilla -")
+--   liftIO $ hSetBuffering inp NoBuffering
+--   liftIO $ hSetBuffering out NoBuffering
+--   liftIO $ hPutStr inp (setupCode nnlsPath file)
+--   return (inp,out)
 
 setupCode libloc loc =
     (if null libloc then "library(nnls)\n"
