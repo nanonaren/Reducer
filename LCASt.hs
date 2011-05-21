@@ -32,6 +32,7 @@ data Options = Options
     , numRandomNodes :: Int
     , namesFile :: FilePath
     , measure :: LCAMeasure
+    , knownChildren :: String
     } deriving (Show,Data,Typeable)
 
 data LCA = LCA
@@ -75,4 +76,5 @@ opts = Options
   , namesFile = "/home/narens/work/lca/data/allnames.tab" &= help "Node names file" &= typFile
   , measure = enum [FitMeasure &= help "Use fits to measure closeness",
                     DistMeasure &= help "Use distance to measure closeness"]
+  , knownChildren = def &= help "Known children"
   }
