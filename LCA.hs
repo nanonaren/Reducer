@@ -52,7 +52,7 @@ data LCA = LCA
 
 lca = LCA
   {
-    options = opts
+    options = undefined
   , rp = (stdin,stdout)
   , names = M.empty
   , revNames = M.empty
@@ -67,15 +67,15 @@ type St = StateT LCA IO
 
 opts = Options
   {
-    maxFits = 198
-  , dataFile = "/home/narens/work/chinese/data/allnodes.tab"
-  , nnlsPath = "/home/narens/Downloads/nnls"
-  , rscriptPath = "/usr/bin/Rscript"
-  , rootNode = "7064"
-  , delta = 0.15
-  , mustInclude = "/home/narens/work/lca/data/76names.tab"
-  , numRandomNodes = 0
-  , namesFile = "/home/narens/work/lca/data/allnames.tab"
+    maxFits = 198 &= help "Number of impact factors"
+  , dataFile = "/home/narens/work/chinese/data/allnodes.tab" &= help "Data file" &= typFile
+  , nnlsPath = "/home/narens/Downloads/nnls" &= help "NNLS library path" &= typDir
+  , rscriptPath = "/usr/bin/Rscript" &= help "Rscript path" &= typFile
+  , rootNode = def &= help "Root node" &= typ "INT"
+  , delta = 0.15 &= help "Allowable fit error" &= typ "DOUBLE"
+  , mustInclude = "/home/narens/work/lca/data/76names.tab" &= help "Must include nodes" &= typFile
+  , numRandomNodes = 0 &= help "Number of extra random nodes to include" &= typ "INT"
+  , namesFile = "/home/narens/work/lca/data/allnames.tab" &= help "Node names file" &= typFile
   }
 
 sampleState = FeatureInfo
@@ -91,14 +91,16 @@ sampleState = FeatureInfo
 myInfo = liftIO.putStrLn
 
 main = do
+  args <- cmdArgs opts
+  let lca' = lca{options = args}
 --  val <- evalStateT (setupCache >> setupR >> setupNodes >>
 --                     setupFeatures >> fromNodeNames [271,364,1844,308,1171,7218,9272] >>= \f1 ->
 --                     fromNodeNames [271,1110,364,1844,6652,308,693] >>= \f2 ->
---                     myPhiMap (f1:f2:[])) lca
+--                     myPhiMap (f1:f2:[])) lca'
 --  print val
   fs <- evalStateT (setupCache >> setupR >> setupNodes >>
                     setupFeatures >> runReducer complete sampleState >>=
-                    toNodeNames) lca
+                    toNodeNames) lca'
   print fs
 
 
@@ -162,18 +164,6 @@ myPhiMap fss = do
   mapM_ (uncurry putInCache) $ zip xss vals
   return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
 
--- myPhi :: Features -> St Double
--- myPhi fs = do
---   root <- gets root
---   xs <- gets (($fs).fromFeatures)
---   val <- lookupCache fs
---   case val of
---     Just v -> return v
---     Nothing -> do
---              (v,_) <- nnls root xs
---              liftIO (print xs)
---              putInCache fs v
---              return v
 myPhi fs = fmap head $ myPhiMap (fs:[])
 
 putInCache :: Features -> Double -> St ()
@@ -260,17 +250,6 @@ setupR = do
     let scode = setupCode nnlsPath file
     pushMap ps (\_ -> return ()) [scode]
   modify (\s -> s{pipes=ps})
-
--- setupR' :: St (Handle,Handle)
--- setupR' = do
---   file <- gets (dataFile.options)
---   nnlsPath <- gets (nnlsPath.options)
---   rscriptPath <- gets (rscriptPath.options)
---   (inp,out,_,_) <- liftIO $ runInteractiveCommand (rscriptPath ++ " --vanilla -")
---   liftIO $ hSetBuffering inp NoBuffering
---   liftIO $ hSetBuffering out NoBuffering
---   liftIO $ hPutStr inp (setupCode nnlsPath file)
---   return (inp,out)
 
 setupCode libloc loc =
     (if null libloc then "library(nnls)\n"
