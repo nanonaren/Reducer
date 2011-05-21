@@ -1,9 +1,11 @@
-{-# LANGUAGE DeriveDataTypeable,NoMonomorphismRestriction,TupleSections #-}
+{-# LANGUAGE NoMonomorphismRestriction,TupleSections #-}
 module Main
     (
       main
     ) where
 
+import LCASt
+import NNLS
 import Math.FeatureReduction.Base
 import Math.FeatureReduction.Features
 import NanoUtils.List (rsortOn,sortOn)
@@ -16,67 +18,12 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import System.Console.CmdArgs
 import System.IO
-import System.Process (runInteractiveCommand)
 import System.Random
 import System.Random.Shuffle (shuffle')
 
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
 import Pipes
-
-data Options = Options
-    {
-      maxFits :: Int,
-      dataFile :: FilePath,
-      nnlsPath :: FilePath,
-      rscriptPath :: FilePath,
-      rootNode :: String,
-      delta :: Double,
-      mustInclude :: FilePath,
-      numRandomNodes :: Int,
-      namesFile :: FilePath
-    } deriving (Show,Data,Typeable)
-
-data LCA = LCA
-    {
-      options :: Options
-    , rp :: (Handle,Handle)
-    , names :: M.Map String Int
-    , revNames :: M.Map Int String
-    , toFeatures :: [Int] -> Features
-    , fromFeatures :: Features -> [Int]
-    , root :: Int
-    , server :: Server
-    , pipes :: Pipes
-    }
-
-lca = LCA
-  {
-    options = undefined
-  , rp = (stdin,stdout)
-  , names = M.empty
-  , revNames = M.empty
-  , toFeatures = undefined
-  , fromFeatures = undefined
-  , root = 0
-  , server = undefined
-  , pipes = undefined
-  }
-
-type St = StateT LCA IO
-
-opts = Options
-  {
-    maxFits = 198 &= help "Number of impact factors"
-  , dataFile = "/home/narens/work/chinese/data/allnodes.tab" &= help "Data file" &= typFile
-  , nnlsPath = "/home/narens/Downloads/nnls" &= help "NNLS library path" &= typDir
-  , rscriptPath = "/usr/bin/Rscript" &= help "Rscript path" &= typFile
-  , rootNode = def &= help "Root node" &= typ "INT"
-  , delta = 0.15 &= help "Allowable fit error" &= typ "DOUBLE"
-  , mustInclude = "/home/narens/work/lca/data/76names.tab" &= help "Must include nodes" &= typFile
-  , numRandomNodes = 0 &= help "Number of extra random nodes to include" &= typ "INT"
-  , namesFile = "/home/narens/work/lca/data/allnames.tab" &= help "Node names file" &= typFile
-  }
 
 sampleState = FeatureInfo
   {
@@ -193,73 +140,3 @@ myFoundIrreducible fs chosen = do
     putStrLn "Wating for key..."
     getChar
     putStrLn "Continuing"
-
-nnlsMap :: Int -> [[Int]] -> St [(Double,[Double])]
-nnlsMap root xss = do
-  ps <- gets pipes
-  maxfits <- gets (maxFits.options)
-  let cmds = map (\xs -> nnlscode [1..maxfits] xs root) xss
-  liftIO $ pushMap ps handler cmds
-    where handler h = skipStupidLines h >>= \ln ->
-                      let ws = words ln
-                          numFits = read.head $ ws
-                          coeffs = map read.tail $ ws
-                      in return (numFits,coeffs)
-
--- nnls :: Int -> [Int] -> St (Double,[Double])
--- nnls root xs = do
---   (inp,out) <- gets rp
---   maxfits <- gets (maxFits.options)
---   let cmd = nnlscode [1..maxfits] xs root
---   liftIO $ hPutStr inp cmd
---   ln <- liftIO (skipStupidLines out)
---   let ws = words ln
---       numFits = read.head $ ws
---       coeffs = map read.tail $ ws
---   return (numFits,coeffs)
-
-nnlscode factors children root =
-    "parent <- t(m[" ++ show root ++ ",])[c(" ++ toRarr factors ++ "),]\n" ++
-    "children <- t(m[c(" ++ toRarr children ++ "),])[c(" ++
-                         toRarr factors ++ "),]\n" ++
-    "n <- nnls(children, parent)\n" ++
-    "rv = 0;clen = length(children[1,]);\n" ++
-    "for (i in 1:clen){rv = rv + n$x[i] * t(children)[i,]}\n" ++ 
-    "di = 0\n" ++
-    "for (i in 1:length(parent)){di = di + (parent[i]-rv[i])^2}\n" ++
-    "dip=0\n" ++
-    "for (i in 1:length(parent)){dip = dip + (parent[i])^2}\n" ++
-    "val = (dip-di)/dip; cat(val);\n" ++
-
-    "for(i in 1:length(n$x))\n" ++
-    "{\n" ++
-    "cat(' ');\n" ++
-    "cat(n$x[i]);\n" ++
-    "}\n" ++
-    "cat('\\n')\n"
-
-setupR :: St ()
-setupR = do
-  ps <- liftIO initPipes
-  file <- gets (dataFile.options)
-  nnlsPath <- gets (nnlsPath.options)
-  rscriptPath <- gets (rscriptPath.options)
-  liftIO $ do
---    addShellPipe ps (rscriptPath ++ " --vanilla -")
-    addShellPipe ps ("ssh `cat ~/ip` '" ++ rscriptPath ++ " --vanilla -" ++ "'")
-    let scode = setupCode nnlsPath file
-    pushMap ps (\_ -> return ()) [scode]
-  modify (\s -> s{pipes=ps})
-
-setupCode libloc loc =
-    (if null libloc then "library(nnls)\n"
-     else "library(nnls,lib.loc=" ++ show libloc ++ ")\n") ++
-    "m<-read.table(" ++ show loc ++ ",header=FALSE);\n"
-
-skipStupidLines h = do
-  ln <- hGetLine h
-  if null ln || head ln == ' ' then skipStupidLines h else return ln
-
-toRarr :: Num a => [a] -> String
-toRarr (x:[]) = show x ++ "," ++ show x
-toRarr xs = init.concat.map ((++",").show) $ xs
