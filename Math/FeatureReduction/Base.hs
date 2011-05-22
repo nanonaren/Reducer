@@ -68,15 +68,6 @@ leveln n ireds = do
   addToWorkingSet n ps
   return ps
 
-multiple :: Monad m => St m [Features]
-multiple = do
-  fs <- complete
-  temp <- gets lvl1and2
-  fss <- sequence $ replicate 10 (resetWorkingSet >> complete' temp 2)
-  return (fs : fss)
-    where resetWorkingSet =
-              modify (\st -> st{workingSet=lvl1and2 st})
-
 complete :: Monad m => St m Features
 complete = complete' (fromList []) 0
 complete' ireds n = do
@@ -122,9 +113,11 @@ pick :: Monad m => Features -> St m (Int,Double)
 pick xs = do
   allfs <- gets allFS
   ws <- gets workingSet
-  ls <- mapM (\x -> complement (union ws x) >>= evalPsi allfs).split 1 $ xs
-  let (x,v) = minimumBy (compare `on` snd).zip (toList xs) $ ls
-  if v == 0 then error (show (x,v) ++ "DONE!") else return 0
+--  ls <- mapM (\x -> complement (union ws x) >>= evalPsi allfs).split 1 $ xs
+  ls <- mapM (\x -> evalPsi allfs (union ws x)).split 1 $ xs
+--  let (x,v) = minimumBy (compare `on` snd).zip (toList xs) $ ls
+  let (x,v) = maximumBy (compare `on` snd).zip (toList xs) $ ls
+--  if v == 0 then error (show (x,v) ++ "DONE!") else return 0
   f <- gets foundIrreducible
   lift (f xs x)
   return (x,v)

@@ -6,6 +6,7 @@ module Math.FeatureReduction.TBase
 import Math.FeatureReduction.Features
 import Math.FeatureReduction.Base
 import Data.Functor.Identity
+import qualified Data.Map as M
 import Control.Monad.State
 import Data.List (sort,nub,(\\),intersect)
 import Test.Framework (testGroup)
@@ -89,7 +90,11 @@ sumC1 =
     runIdentity (evalStateT complete (sample 46)) @?=
                 fromList [4..10]
 
-sample3 n = FeatureInfo {allFS = fromList [1,20,10,5,9,2,7],phi=samplePhi n,psi=samplePsi n,foundIrreducible=dummy}
+sample3 n = dummySample {allFS = fromList [1,20,10,5,9,2,7],phi=samplePhi n,psi=samplePsi n}
+dummySample = FeatureInfo {allFS=undefined,phi=undefined,psi=undefined,
+                           foundIrreducible=dummy,lvl1and2=fromList [],
+                           workingSet=fromList [],pickedAtLvl=M.empty,
+                           info=(\_ -> return ())}
 sumC3 =
     runIdentity (evalStateT complete (sample3 46)) @?=
                 fromList [7,9,10,20]
@@ -129,7 +134,7 @@ sumC7 =
     runIdentity (evalStateT complete (sample 20)) @?=
                 fromList [8,9,10]
 
-sample n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi n,psi=samplePsi n,foundIrreducible=dummy}
+sample n = dummySample {allFS = fromList [1..10],phi=samplePhi n,psi=samplePsi n}
 samplePhi :: Double -> Features -> Identity Value
 samplePhi n = return.pick.fromIntegral.sum.toList
     where pick x | x > n = n
@@ -144,23 +149,28 @@ testb =
     runIdentity (evalStateT (level2 (fromList [])) (sample2 46)) @?=
                 fromList [10]
 
+setWS xs = modify (\st -> st{workingSet=fromList xs})
+
+--check =
+--    runIdentity (evalStateT (setWS [] >> level1) (sample2 46))
+
 testc =
-    runIdentity (evalStateT (leveln 4 (fromList [10])) (sample2 46)) @?=
+    runIdentity (evalStateT (setWS [10] >> leveln 4 (fromList [10])) (sample2 46)) @?=
                 fromList [9,8]
 
 testd =
-    runIdentity (evalStateT (leveln 8 (fromList [8,9,10])) (sample2 46)) @?=
-                fromList [6,7]
+    runIdentity (evalStateT (setWS [10,9,8] >> leveln 8 (fromList [8,9,10])) (sample2 46)) @?=
+                fromList [7]
 
 teste =
-    runIdentity (evalStateT (leveln 16 (fromList [6,7,8,9,10])) (sample2 46)) @?=
-                fromList []
+    runIdentity (evalStateT (setWS [10,9,8,7] >> leveln 16 (fromList [7,8,9,10])) (sample2 46)) @?=
+                fromList [6]
 
 testf =
     runIdentity (evalStateT complete (sample2 46)) @?=
                 fromList [6..10]
 
-sample2 n = FeatureInfo {allFS = fromList [1..10],phi=samplePhi2 n,psi=samplePsi2 n,foundIrreducible=dummy}
+sample2 n = dummySample {allFS = fromList [1..10],phi=samplePhi2 n,psi=samplePsi2 n}
 samplePhi2 :: Int -> Features -> Identity Value
 samplePhi2 n = return.fromIntegral.penalize.sum.toList
     where pick x | x > n = n
