@@ -12,6 +12,7 @@ module Math.FeatureReduction.Base
     , runReducer
     ) where
 
+import Math.FeatureReduction.BaseSt
 import Control.Monad.State
 import Data.List (partition,intersect,splitAt,maximumBy,minimumBy)
 import Data.Function (on)
@@ -22,24 +23,9 @@ import NanoUtils.Container (foldMapM)
 import NanoUtils.Tuple
 import NanoUtils.List (pairUp)
 
-data FeatureInfo m = FeatureInfo
-    {
-      allFS :: Features
-    , workingSet :: Features
-    , phi :: Features -> m Value
-    , psi :: Features -> Features -> m Value
-    , foundIrreducible :: Features -> Int -> m ()
-    , info :: String -> m ()
-    }
-
-type St m = StateT (FeatureInfo m) m
-type Value = Double
-type Phi m = Features -> m Value
-type Psi m = Features -> Features -> m Value
-
 -- |Run reducer
 runReducer :: Monad m => St m a -> FeatureInfo m -> m a
-runReducer action st = evalStateT action st
+runReducer = evalStateT
 
 -- |Construct the Psi function
 phiToPsi :: Monad m => Phi m -> Psi m
@@ -56,7 +42,7 @@ level1 = do
   nonZeros <- evalAndPart.split 1 $ allfs
   lift $ mapM_ (\fs -> call fs (head $ toList fs)) nonZeros
   let ws = unions nonZeros
-  addToWorkingSet ws
+  addToWorkingSet 1 ws
   return ws
 
 -- |Level 2
@@ -68,7 +54,7 @@ level2 ireds = do
   let counts = countMap (concat.map toList $ nonZeros)
       fs = stuff nonZeros counts
   lift $ mapM_ (\x -> call (fromList [x]) x) (toList fs)
-  addToWorkingSet fs
+  addToWorkingSet 2 fs
   return $ fs
 
 -- |level n, n > 2
@@ -79,13 +65,17 @@ leveln n ireds = do
   inf <- gets info
   lift (inf.show.length $ nonZeros)
   ps <- mapM irreds nonZeros >>= picks.concat
-  addToWorkingSet ps
+  addToWorkingSet n ps
   return ps
 
-addToWorkingSet :: Monad m => Features -> St m ()
-addToWorkingSet fs = do
-  ws <- gets workingSet
-  modify (\st -> st{workingSet = union ws fs})
+multiple :: Monad m => St m [Features]
+multiple = do
+  fs <- complete
+  temp <- gets lvl1and2
+  fss <- sequence $ replicate 10 (resetWorkingSet >> complete' temp 2)
+  return (fs : fss)
+    where resetWorkingSet =
+              modify (\st -> st{workingSet=lvl1and2 st})
 
 complete :: Monad m => St m Features
 complete = complete' (fromList []) 0
@@ -113,10 +103,6 @@ evalPsi :: Monad m => Features -> Features -> St m Value
 evalPsi context x = do
   f <- gets psi
   lift (f context x)
-
--- | set complement of X in F
-complement :: Monad m => Features -> St m Features
-complement ireds = gets allFS >>= return.flip diff ireds
 
 -- |Apply psi to list and partition into zero and non-zero
 evalAndPart :: Monad m => [Features] -> St m [Features]
