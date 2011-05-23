@@ -95,6 +95,15 @@ dummySample = FeatureInfo {allFS=undefined,phi=undefined,psi=undefined,
                            foundIrreducible=dummy,lvl1and2=fromList [],
                            workingSet=fromList [],pickedAtLvl=M.empty,
                            info=(\_ -> return ())}
+{-
+sampleX n = dummySample {allFS = fromList [1,20,10,5,9,2,7],phi=samplePhi n,psi=samplePsi n}
+check = do
+  gen <- newStdGen
+  let xs = take 100 $ randomRs (0,1000) gen
+      sampleX' = (sampleX 10000){allFS = fromList xs}
+  print xs
+  return $ runIdentity (evalStateT complete sampleX')
+-}
 sumC3 =
     runIdentity (evalStateT complete (sample3 46)) @?=
                 fromList [7,9,10,20]
@@ -150,9 +159,6 @@ testb =
                 fromList [10]
 
 setWS xs = modify (\st -> st{workingSet=fromList xs})
-
---check =
---    runIdentity (evalStateT (setWS [] >> level1) (sample2 46))
 
 testc =
     runIdentity (evalStateT (setWS [10] >> leveln 4 (fromList [10])) (sample2 46)) @?=

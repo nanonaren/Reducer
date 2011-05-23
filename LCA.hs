@@ -29,6 +29,8 @@ sampleState = FeatureInfo
   {
     allFS = fromList [1..75]
   , workingSet = fromList []
+  , pickedAtLvl = undefined
+  , lvl1and2 = undefined
   , phi = myPhi
   , psi = phiToPsi myPhi
   , foundIrreducible = myFoundIrreducible
@@ -41,9 +43,8 @@ main = do
   args <- cmdArgs opts
   let lca' = lca{options = args}
 --  val <- evalStateT (setupCache >> setupR >> setupNodes >>
---                     setupFeatures >> fromNodeNames [271,364,1844,308,1171,7218,9272] >>= \f1 ->
---                     fromNodeNames [271,1110,364,1844,6652,308,693] >>= \f2 ->
---                     myPhiMap (f1:f2:[])) lca'
+--                     setupFeatures >> fromNodeNames [1154,1178,1817,1855,7008,7017,7101,7218,7303,9272,10790,10798,10804,10806] >>= \f1 ->
+--                     myPhiMap (f1:[])) lca'
 --  print val
   fs <- evalStateT (setupCache >> setupR >> setupNodes >>
                     setupFeatures >> runReducer complete sampleState >>=
@@ -133,6 +134,8 @@ getKey root fs = show root ++ show (toNumber fs)
 
 myFoundIrreducible :: Features -> Int -> St ()
 myFoundIrreducible fs chosen = do
+  return ()
+{-
   fs' <- toNodeNames fs
   (c:_)  <-  toNodeNames (fromList [chosen])
   liftIO $ do
@@ -140,3 +143,4 @@ myFoundIrreducible fs chosen = do
     putStrLn "Wating for key..."
     getChar
     putStrLn "Continuing"
+-}
