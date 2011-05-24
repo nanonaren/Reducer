@@ -15,12 +15,19 @@ module Math.FeatureReduction.Features
     , leaveOneOuts
     , toNumber
     , fromNumber
+    , randSubset
     ) where
 
 import qualified Data.BitSet as B
 import Data.List (foldl')
 import Data.Bits
 import qualified NanoUtils.List as L (chunk,leaveOneOuts)
+import NanoUtils.Set (randPicks)
+import Control.Monad.Random (RandomGen,Rand)
+import Control.Monad (liftM)
+
+randSubset :: RandomGen g => Int -> Features -> Rand g Features
+randSubset k fs = liftM (fromList.snd) $ randPicks (size fs) k (toList fs)
 
 {- 
 ******* NOTE **********
