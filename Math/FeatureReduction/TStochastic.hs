@@ -13,18 +13,29 @@ import Data.List (nub)
 main = do
   hSetBuffering stdout NoBuffering
   gen <- newStdGen
-  let xs = nub.take 50 $ randomRs (1,10000) gen
-  let fs = fromList xs
-      phi = samplePhi2 10000
-  val <- phi fs
+  let xs = [1..100]
+      fs = fromList xs
+      phi = samplePhi 692
+  fs' <- runR fs phi 20 (\f i lvl -> putStrLn $ show lvl ++ " : " ++ show f ++ " : " ++ show i) 692 fs gen
+  let sub = diff fs fs'
+  val <- phi sub
+  putStrLn $ show val ++ " : " ++ show sub
+
+--main = do
+--  hSetBuffering stdout NoBuffering
+--  gen <- newStdGen
+--  let xs = nub.take 50 $ randomRs (1,10000) gen
+--      fs = fromList xs
+--      phi = samplePhi2 10000
+--  val <- phi fs
 --  interactive2 phi fs fs
-  interactive phi fs val val 20000 fs
+--  interactive phi fs val val 20000 fs
 
 interactive2 phi all fs = do
   target <- phi fs
   putStrLn $ "FEATURES: " ++ show fs ++ "; TARGET: " ++ show target
   gen <- newStdGen
-  fs' <- runR fs phi 30 (\f i -> putStrLn $ show f ++ " : " ++ show i) target fs gen
+  fs' <- runR fs phi 30 (\f i lvl -> putStrLn $ show lvl ++ " : " ++ show f ++ " : " ++ show i) target fs gen
   let sub = diff all fs'
   val <- phi sub
   putStrLn $ show val ++ " : " ++ show sub
@@ -50,7 +61,7 @@ interactive phi all low target high fs = do
   putStrLn $ "LOW: " ++ show low ++ "; HIGH: " ++ show high ++
              "; CURRENT: " ++ show target ++ "; FEATURES: " ++ show fs
   gen <- newStdGen
-  fs' <- runR all phi 10 (\f i -> putStrLn $ show f ++ " : " ++ show i) target fs gen
+  fs' <- runR all phi 10 (\f i lvl -> putStrLn $ show lvl ++ " : " ++ show f ++ " : " ++ show i) target fs gen
   let sub = diff all fs'
   val <- phi sub
   putStrLn $ show val ++ " : " ++ show sub

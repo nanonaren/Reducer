@@ -14,20 +14,10 @@ data Env m = Env
     {
       psi :: Features -> m Value
     , numSamples :: Int
-    , foundIrreducible :: Features -> Int -> m ()
+    , foundIrreducible :: Features -> Int -> Int -> m ()
     }
 
 type R g m = RandT g (ReaderT (Env m) m)
-
-{-
-createEnv :: Monad m => Phi m -> Features -> (Features -> Int -> m ()) ->
-             Value -> Env m
-createEnv phi allFeatures call targetVal =
-    Env (toPsi allFeatures phi targetVal) call
-
---stochastic :: Monad m => m Features
-
--}
 
 runR allFeatures phi numSamples call target fs gen = runReaderT runRand env
     where env = Env (toPsi allFeatures phi target) numSamples call
@@ -49,8 +39,8 @@ complete' lvl fs = do
              case res of
                Nothing -> complete' (nextLvl fs) fs
                Just x -> let fs' = diff fs (fromList [x])
-                         in complete' (nextLvl fs') fs'
-    where nextLvl f = if lvl+1 > sz f then sz f else lvl+1
+                         in complete' lvl fs' --(nextLvl fs') fs'
+    where nextLvl f = if lvl+2 > sz f then sz f else lvl+2
           sz = size
 
 stopAlg :: (RandomGen g,Monad m) => Features -> R g m Bool
@@ -62,7 +52,7 @@ stopAlg fs = do
 level1 :: (RandomGen g,Monad m) => Features -> R g m Features
 level1 fs = do
   nonZeros <- evalAndPart.split 1 $ fs
-  mapM_ (\f -> reportIrreducible f (head $ toList f)) nonZeros
+  mapM_ (\f -> reportIrreducible f (head $ toList f) 1) nonZeros
   return.diff fs.unions $ nonZeros
 
 evalAndPart :: (RandomGen g,Monad m) => [Features] -> R g m [Features]
@@ -74,18 +64,18 @@ sample :: (RandomGen g,Monad m) => Int -> Features -> R g m (Maybe Int)
 sample k fs = do
   num <- lift $ asks (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
-  pickElement sets
+  pickElement k sets
 
-pickElement :: (RandomGen g, Monad m) => [Features] -> R g m (Maybe Int)
-pickElement [] = return Nothing
-pickElement (f:fs) = do
+pickElement :: (RandomGen g, Monad m) => Int -> [Features] -> R g m (Maybe Int)
+pickElement _ [] = return Nothing
+pickElement lvl (f:fs) = do
   s <- score f
   case s > 0 of
     True -> getIrreducible f >>= \irred ->
             wrapRand (randPick (size irred) (toList irred)) >>= \(p,_) ->
-            reportIrreducible irred p >>
+            reportIrreducible irred p lvl >>
             return (Just p)
-    False -> pickElement fs
+    False -> pickElement lvl fs
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
 getIrreducible fs = do
@@ -97,10 +87,10 @@ getIrreducible fs = do
         Nothing -> return fs
         (Just fs') -> getIrreducible fs'
 
-reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> R g m ()
-reportIrreducible fs p = do
+reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> Int -> R g m ()
+reportIrreducible fs p lvl = do
   call <- lift $ asks foundIrreducible
-  lift.lift $ call fs p
+  lift.lift $ call fs p lvl
 
 wrapRand act = getSplit >>= return.evalRand act
 
