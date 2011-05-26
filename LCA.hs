@@ -30,53 +30,60 @@ import Data.String.Utils (split)
 main = do
   args <- cmdArgs opts
   let lca' = lca{options = args}
-      fs = fromList [1..75]
-      target = 198
-  gen <- newStdGen
-  -- val <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-  --                    setupFeatures >> fromNodeNames [281,1056,1171,7224] >>= \f1 ->
-  --                    myPhiMap (f1:[])) lca'
-  -- print val
   evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-              setupFeatures >> summaryHeader >>
-              runR fs myPhi 20 myFoundIrreducible target fs gen >>=
-              summaryRun.diff fs) lca'
+              setupFeatures >> summaryHeader >> runAll) lca'
+
+runAll = do
+  fs <- getFeatures
+  target <- gets (fromIntegral.maxFits.options)
+  numSamples <- gets (samples.options)
+  nruns <- gets (runs.options)
+  let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
+              liftIO newStdGen >>=
+              runR fs myPhi numSamples myFoundIrreducible target fs >>=
+              summaryRun i.diff fs
+  mapM_ run [1..nruns]
 
 summaryHeader :: St ()
 summaryHeader = do
+  fs <- fmap toList getFeatures
   tree <- gets (read.rootNode.options) >>= toLongName
   kchildren <- getKnownChildren
+  nruns <- gets (runs.options)
 
   rootN <- gets root
-  ((_,coeffs):_) <- nnlsMap rootN [[1..75]]
+  ((_,coeffs):_) <- nnlsMap rootN [fs]
   fromNNLS <- (>>= toLongNames).toNodeNames.fromList.map fst.
-              filter ((>0).snd).zip [1..75] $ coeffs
+              filter ((>0).snd).zip fs $ coeffs
 
   liftIO.print $
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
         param "Raw NNLS" (listNodes fromNNLS) <$$>
-        param "Number of nodes used" (int 10)
+        param "Number of nodes used" (int $ length fs) <$$>
+        param "Number of runs" (int nruns) <$$> text ""
 
 getKnownChildren :: St [String]
 getKnownChildren = do
   kc <- gets (knownChildren.options)
   toLongNames.sort $ map read (split "," kc)
 
-summaryRun :: Features -> St ()
-summaryRun fs = do
+summaryRun :: Int -> Features -> St ()
+summaryRun i fs = do
   d <- gets doc
   calls <- gets numCalls
   nodes <- toNodeNames fs >>= toLongNames
   liftIO.print $
+        text "===== Run" <+> int i <+> text "=====" <$$>
         param "Num calls" (int calls) <$$>
         param "Discovered Tree" (listNodes nodes) <$$>
-        param "Irreducibles" d
+        param "Irreducibles" d <$$> text ""
 
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
   mp <- gets longNames
-  return.map (\x -> ((show x ++ " ") ++).fromJust.flip M.lookup mp $ x) $ xs
+  return.map (\x -> ((show x ++ " ") ++).rep.fromJust.flip M.lookup mp $ x) $ xs
+    where rep = map (\c -> if c == '_' then ' ' else c)
 toLongName = fmap head.toLongNames.(:[])
 
 loadLongNames :: St ()

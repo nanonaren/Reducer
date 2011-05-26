@@ -8,12 +8,13 @@ module LCASt
     , lca
     , opts
     , incCallCount
+    , getFeatures
     ) where
 
 import Pipes
 import Control.Monad.State
 import qualified Data.Map as M
-import Math.FeatureReduction.Features (Features)
+import Math.FeatureReduction.Features (Features,fromList)
 import Network.Memcache.Protocol
 import System.Console.CmdArgs
 import System.IO
@@ -35,6 +36,8 @@ data Options = Options
     , namesFile :: FilePath
     , measure :: LCAMeasure
     , knownChildren :: String
+    , runs :: Int
+    , samples :: Int
     } deriving (Show,Data,Typeable)
 
 data LCA = LCA
@@ -85,7 +88,12 @@ opts = Options
   , measure = enum [FitMeasure &= help "Use fits to measure closeness",
                     DistMeasure &= help "Use distance to measure closeness"]
   , knownChildren = def &= help "Known children"
+  , runs = 1 &= help "Number of runs" &= typ "INT"
+  , samples = 20 &= help "Number of samples" &= typ "INT"
   }
 
 incCallCount :: St ()
 incCallCount = modify (\st -> st{numCalls = numCalls st + 1})
+
+getFeatures :: St Features
+getFeatures = gets (\st -> toFeatures st.M.keys.revNames $ st)
