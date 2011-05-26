@@ -7,7 +7,7 @@ module Main
 import LCASt
 import NNLS
 import Math.FeatureReduction.Stochastic
-import Math.FeatureReduction.Features
+import Math.FeatureReduction.Features hiding (split)
 import NanoUtils.List (rsortOn,sortOn)
 import NanoUtils.Tuple (swap)
 
@@ -18,13 +18,14 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import System.Console.CmdArgs
 import System.IO
-import System.Random
+import System.Random hiding (split)
 import System.Random.Shuffle (shuffle')
 
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
 import Pipes
 import Text.PrettyPrint.ANSI.Leijen
+import Data.String.Utils (split)
 
 main = do
   args <- cmdArgs opts
@@ -37,18 +38,27 @@ main = do
   --                    myPhiMap (f1:[])) lca'
   -- print val
   fs <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-                    setupFeatures >> runR fs myPhi 20 myFoundIrreducible target fs gen >>=
+                    setupFeatures >> summaryHeader >>
+                    return (fromList [1..60]) >>=
+--                    runR fs myPhi 20 myFoundIrreducible target fs gen >>=
                     toNodeNames.diff fs >>= \f -> gets numCalls >>= \c ->
                     liftIO (putStrLn ("num calls: " ++ show c)) >> return f) lca'
   print fs
 
 summaryHeader :: St ()
 summaryHeader = do
+  tree <- gets (read.rootNode.options) >>= toLongName
+  kchildren <- getKnownChildren
   liftIO.print $
-        param "Tree" (text "hello") <$$>
-        param "Known Nodes" (text "mad man") <$$>
+        param "Tree" (text tree) <$$>
+        param "Known Nodes" (listNodes kchildren) <$$>
         param "Number of nodes used" (int 10) <$$>
         param "Number of runs" (int 20)
+
+getKnownChildren :: St [String]
+getKnownChildren = do
+  kc <- gets (knownChildren.options)
+  toLongNames.sort $ map read (split "," kc)
 
 summaryRun :: St ()
 summaryRun = do
@@ -59,7 +69,9 @@ summaryRun = do
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
   mp <- gets longNames
-  return.map (\x -> ((show x ++ ":") ++).fromJust.flip M.lookup mp $ x) $ xs
+  liftIO.print $ xs
+  return.map (\x -> ((show x ++ " ") ++).fromJust.flip M.lookup mp $ x) $ xs
+toLongName = fmap head.toLongNames.(:[])
 
 loadLongNames :: St ()
 loadLongNames = do
@@ -69,6 +81,8 @@ loadLongNames = do
   modify (\st -> st{longNames = mp})
 
 param name info = fill 30 (text name) <> align (colon <+> info)
+
+listNodes = align.vcat.map text
 
 setupCache :: St ()
 setupCache = do
