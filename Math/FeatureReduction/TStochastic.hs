@@ -16,7 +16,7 @@ main = do
   let xs = [1..100]
       fs = fromList xs
       phi = samplePhi 692
-  fs' <- runR fs phi 20 (\f i lvl -> putStrLn $ show lvl ++ " : " ++ show f ++ " : " ++ show i) 692 fs gen
+  fs' <- runR fs phi 20 (\f i lvl -> putStrLn $ show lvl ++ " : " ++ show (size f)) 692 fs gen -- ++ " : " ++ show f ++ " : " ++ show i) 692 fs gen
   let sub = diff fs fs'
   val <- phi sub
   putStrLn $ show val ++ " : " ++ show sub

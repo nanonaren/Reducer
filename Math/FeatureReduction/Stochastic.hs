@@ -25,11 +25,11 @@ runR allFeatures phi numSamples call target fs gen = runReaderT runRand env
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
 complete fs = do
-  complete' 1 fs
---  fs' <- level1 fs
---  if size fs' == 0
---   then return fs'
---   else complete' 2 fs'
+--  complete' 1 fs
+  fs' <- level1 fs
+  if size fs' == 0
+   then return fs'
+   else complete' 2 fs'
 
 complete' lvl fs = do
   stop <- stopAlg fs
@@ -37,10 +37,12 @@ complete' lvl fs = do
     True -> return fs
     False -> sample lvl fs >>= \res ->
              case res of
-               Nothing -> complete' (nextLvl fs) fs
-               Just x -> let fs' = diff fs (fromList [x])
-                         in complete' lvl fs' --(nextLvl fs') fs'
-    where nextLvl f = if lvl+2 > sz f then sz f else lvl+2
+               Nothing -> complete' nextLvl fs
+               Just (x,lvl') -> let fs' = diff fs (fromList [x])
+                                in complete' lvl' fs'
+    where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
+                     then sz fs
+                     else floor (fromIntegral lvl*1.6)
           sz = size
 
 stopAlg :: (RandomGen g,Monad m) => Features -> R g m Bool
@@ -60,13 +62,13 @@ evalAndPart fss = do
   xs <- mapM score fss >>= return.zip fss
   return.map fst.fst.partition ((>0).snd) $ xs
 
-sample :: (RandomGen g,Monad m) => Int -> Features -> R g m (Maybe Int)
+sample :: (RandomGen g,Monad m) => Int -> Features -> R g m (Maybe (Int,Int))
 sample k fs = do
   num <- lift $ asks (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement k sets
 
-pickElement :: (RandomGen g, Monad m) => Int -> [Features] -> R g m (Maybe Int)
+pickElement :: (RandomGen g, Monad m) => Int -> [Features] -> R g m (Maybe (Int,Int))
 pickElement _ [] = return Nothing
 pickElement lvl (f:fs) = do
   s <- score f
@@ -74,7 +76,7 @@ pickElement lvl (f:fs) = do
     True -> getIrreducible f >>= \irred ->
             wrapRand (randPick (size irred) (toList irred)) >>= \(p,_) ->
             reportIrreducible irred p lvl >>
-            return (Just p)
+            return (Just (p,size irred))
     False -> pickElement lvl fs
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
