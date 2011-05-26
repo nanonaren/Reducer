@@ -6,7 +6,6 @@ module Main
 
 import LCASt
 import NNLS
---import Math.FeatureReduction.Base
 import Math.FeatureReduction.Stochastic
 import Math.FeatureReduction.Features
 import NanoUtils.List (rsortOn,sortOn)
@@ -25,20 +24,7 @@ import System.Random.Shuffle (shuffle')
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
 import Pipes
-
--- sampleState = FeatureInfo
---   {
---     allFS = fromList [1..75]
---   , workingSet = fromList []
---   , pickedAtLvl = undefined
---   , lvl1and2 = undefined
---   , phi = myPhi
---   , psi = phiToPsi myPhi
---   , foundIrreducible = myFoundIrreducible
---   , info = myInfo
---   }
-
--- myInfo = liftIO.putStrLn
+import Text.PrettyPrint.ANSI.Leijen
 
 main = do
   args <- cmdArgs opts
@@ -46,16 +32,43 @@ main = do
       fs = fromList [1..75]
       target = 198
   gen <- newStdGen
-  -- val <- evalStateT (setupCache >> setupR >> setupNodes >>
+  -- val <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
   --                    setupFeatures >> fromNodeNames [281,1056,1171,7224] >>= \f1 ->
   --                    myPhiMap (f1:[])) lca'
   -- print val
-  fs <- evalStateT (setupCache >> setupR >> setupNodes >>
+  fs <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
                     setupFeatures >> runR fs myPhi 20 myFoundIrreducible target fs gen >>=
                     toNodeNames.diff fs >>= \f -> gets numCalls >>= \c ->
                     liftIO (putStrLn ("num calls: " ++ show c)) >> return f) lca'
   print fs
 
+summaryHeader :: St ()
+summaryHeader = do
+  liftIO.print $
+        param "Tree" (text "hello") <$$>
+        param "Known Nodes" (text "mad man") <$$>
+        param "Number of nodes used" (int 10) <$$>
+        param "Number of runs" (int 20)
+
+summaryRun :: St ()
+summaryRun = do
+  liftIO.print $
+        param "Num calls" (int 20) <$$>
+        param "Discovered Tree" (text "tree")
+
+toLongNames :: [Int] -> St [String]
+toLongNames xs = do
+  mp <- gets longNames
+  return.map (\x -> ((show x ++ ":") ++).fromJust.flip M.lookup mp $ x) $ xs
+
+loadLongNames :: St ()
+loadLongNames = do
+  names <- gets (namesFile.options)
+  contents <- liftIO $ readFile names
+  let mp = M.fromList.map (\l -> let (a:b:_) = words l in (read a,b)).lines $ contents
+  modify (\st -> st{longNames = mp})
+
+param name info = fill 30 (text name) <> align (colon <+> info)
 
 setupCache :: St ()
 setupCache = do

@@ -48,6 +48,7 @@ data LCA = LCA
     , server :: Server
     , pipes :: Pipes
     , numCalls :: Int
+    , longNames :: M.Map Int String
     }
 
 lca = LCA
@@ -62,6 +63,7 @@ lca = LCA
   , server = undefined
   , pipes = undefined
   , numCalls = 0
+  , longNames = M.empty
   }
 
 type St = StateT LCA IO
