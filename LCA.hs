@@ -6,7 +6,8 @@ module Main
 
 import LCASt
 import NNLS
-import Math.FeatureReduction.Base
+--import Math.FeatureReduction.Base
+import Math.FeatureReduction.Stochastic
 import Math.FeatureReduction.Features
 import NanoUtils.List (rsortOn,sortOn)
 import NanoUtils.Tuple (swap)
@@ -25,30 +26,34 @@ import qualified Network.Memcache as C
 import Network.Memcache.Protocol
 import Pipes
 
-sampleState = FeatureInfo
-  {
-    allFS = fromList [1..75]
-  , workingSet = fromList []
-  , pickedAtLvl = undefined
-  , lvl1and2 = undefined
-  , phi = myPhi
-  , psi = phiToPsi myPhi
-  , foundIrreducible = myFoundIrreducible
-  , info = myInfo
-  }
+-- sampleState = FeatureInfo
+--   {
+--     allFS = fromList [1..75]
+--   , workingSet = fromList []
+--   , pickedAtLvl = undefined
+--   , lvl1and2 = undefined
+--   , phi = myPhi
+--   , psi = phiToPsi myPhi
+--   , foundIrreducible = myFoundIrreducible
+--   , info = myInfo
+--   }
 
-myInfo = liftIO.putStrLn
+-- myInfo = liftIO.putStrLn
 
 main = do
   args <- cmdArgs opts
   let lca' = lca{options = args}
---  val <- evalStateT (setupCache >> setupR >> setupNodes >>
---                     setupFeatures >> fromNodeNames [1154,1178,1817,1855,7008,7017,7101,7218,7303,9272,10790,10798,10804,10806] >>= \f1 ->
---                     myPhiMap (f1:[])) lca'
---  print val
+      fs = fromList [1..75]
+      target = 198
+  gen <- newStdGen
+  -- val <- evalStateT (setupCache >> setupR >> setupNodes >>
+  --                    setupFeatures >> fromNodeNames [281,1056,1171,7224] >>= \f1 ->
+  --                    myPhiMap (f1:[])) lca'
+  -- print val
   fs <- evalStateT (setupCache >> setupR >> setupNodes >>
-                    setupFeatures >> runReducer complete sampleState >>=
-                    toNodeNames) lca'
+                    setupFeatures >> runR fs myPhi 20 myFoundIrreducible target fs gen >>=
+                    toNodeNames.diff fs >>= \f -> gets numCalls >>= \c ->
+                    liftIO (putStrLn ("num calls: " ++ show c)) >> return f) lca'
   print fs
 
 
@@ -110,6 +115,7 @@ myPhiMap fss = do
       cached' = map (\((i,_),v) -> (i,fromJust v)) cached
   vals <- fmap (fst.unzip).nnlsMap root.map fromFS $ xss
   mapM_ (uncurry putInCache) $ zip xss vals
+  sequence_.replicate (length fss) $ incCallCount
   return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
 
 myPhi fs = fmap head $ myPhiMap (fs:[])
@@ -132,15 +138,9 @@ lookupCache fs
 getKey :: Int -> Features -> String
 getKey root fs = show root ++ show (toNumber fs)
 
-myFoundIrreducible :: Features -> Int -> St ()
-myFoundIrreducible fs chosen = do
-  return ()
-{-
+myFoundIrreducible :: Features -> Int -> Int -> St ()
+myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs
-  (c:_)  <-  toNodeNames (fromList [chosen])
-  liftIO $ do
-    putStrLn $ "Chose " ++ show c ++ " in " ++ show fs'
-    putStrLn "Wating for key..."
-    getChar
-    putStrLn "Continuing"
--}
+  chosen' <- fmap head $ toNodeNames (fromList [chosen])
+  liftIO.putStrLn $ "LEVEL: " ++ show lvl ++ "; ACTUAL: " ++ show (length fs') ++
+                    "; CHOSE: " ++ show chosen' ++ " : " ++ show fs'

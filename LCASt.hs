@@ -7,6 +7,7 @@ module LCASt
     , LCAMeasure (..)
     , lca
     , opts
+    , incCallCount
     ) where
 
 import Pipes
@@ -46,6 +47,7 @@ data LCA = LCA
     , root :: Int
     , server :: Server
     , pipes :: Pipes
+    , numCalls :: Int
     }
 
 lca = LCA
@@ -59,6 +61,7 @@ lca = LCA
   , root = 0
   , server = undefined
   , pipes = undefined
+  , numCalls = 0
   }
 
 type St = StateT LCA IO
@@ -78,3 +81,6 @@ opts = Options
                     DistMeasure &= help "Use distance to measure closeness"]
   , knownChildren = def &= help "Known children"
   }
+
+incCallCount :: St ()
+incCallCount = modify (\st -> st{numCalls = numCalls st + 1})
