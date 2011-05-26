@@ -86,9 +86,9 @@ loadLongNames = do
   let mp = M.fromList.map (\l -> let (a:b:_) = words l in (read a,b)).lines $ contents
   modify (\st -> st{longNames = mp})
 
-param name info = fill 30 (text name) <> align (colon <+> info)
+param name info = fill 30 (text name) <> colon <+> align info
 
-listNodes = align.vcat.map text
+listNodes = vcat.map text
 
 setupCache :: St ()
 setupCache = do
@@ -173,12 +173,12 @@ getKey root fs = show root ++ show (toNumber fs)
 
 myFoundIrreducible :: Features -> Int -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
-  fs' <- toNodeNames fs
+  fs' <- toNodeNames fs >>= toLongNames
   chosen' <- fmap head $ toNodeNames (fromList [chosen])
   let d = hsep.punctuate semi $
           [ text "LEVEL:" <+> (int lvl)
           , text "ACTUAL:" <+> (int $ length fs')
           , text "CHOSE:" <+> (int chosen')
-          , text "IRRED:" <+> (text $ show fs')
+          , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
           ]
   modify (\st -> st{doc = doc st <$$> d})
