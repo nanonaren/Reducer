@@ -49,9 +49,16 @@ summaryHeader :: St ()
 summaryHeader = do
   tree <- gets (read.rootNode.options) >>= toLongName
   kchildren <- getKnownChildren
+
+  rootN <- gets root
+  ((_,coeffs):_) <- nnlsMap rootN [[1..75]]
+  fromNNLS <- (>>= toLongNames).toNodeNames.fromList.map fst.
+              filter ((>0).snd).zip [1..75] $ coeffs
+
   liftIO.print $
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
+        param "Raw NNLS" (listNodes fromNNLS) <$$>
         param "Number of nodes used" (int 10) <$$>
         param "Number of runs" (int 20)
 
@@ -69,7 +76,6 @@ summaryRun = do
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
   mp <- gets longNames
-  liftIO.print $ xs
   return.map (\x -> ((show x ++ " ") ++).fromJust.flip M.lookup mp $ x) $ xs
 toLongName = fmap head.toLongNames.(:[])
 
