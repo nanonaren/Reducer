@@ -37,13 +37,10 @@ main = do
   --                    setupFeatures >> fromNodeNames [281,1056,1171,7224] >>= \f1 ->
   --                    myPhiMap (f1:[])) lca'
   -- print val
-  fs <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-                    setupFeatures >> summaryHeader >>
-                    return (fromList [1..60]) >>=
---                    runR fs myPhi 20 myFoundIrreducible target fs gen >>=
-                    toNodeNames.diff fs >>= \f -> gets numCalls >>= \c ->
-                    liftIO (putStrLn ("num calls: " ++ show c)) >> return f) lca'
-  print fs
+  evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+              setupFeatures >> summaryHeader >>
+              runR fs myPhi 20 myFoundIrreducible target fs gen >>=
+              summaryRun.diff fs) lca'
 
 summaryHeader :: St ()
 summaryHeader = do
@@ -59,19 +56,22 @@ summaryHeader = do
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
         param "Raw NNLS" (listNodes fromNNLS) <$$>
-        param "Number of nodes used" (int 10) <$$>
-        param "Number of runs" (int 20)
+        param "Number of nodes used" (int 10)
 
 getKnownChildren :: St [String]
 getKnownChildren = do
   kc <- gets (knownChildren.options)
   toLongNames.sort $ map read (split "," kc)
 
-summaryRun :: St ()
-summaryRun = do
+summaryRun :: Features -> St ()
+summaryRun fs = do
+  d <- gets doc
+  calls <- gets numCalls
+  nodes <- toNodeNames fs >>= toLongNames
   liftIO.print $
-        param "Num calls" (int 20) <$$>
-        param "Discovered Tree" (text "tree")
+        param "Num calls" (int calls) <$$>
+        param "Discovered Tree" (listNodes nodes) <$$>
+        param "Irreducibles" d
 
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
@@ -175,5 +175,10 @@ myFoundIrreducible :: Features -> Int -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs
   chosen' <- fmap head $ toNodeNames (fromList [chosen])
-  liftIO.putStrLn $ "LEVEL: " ++ show lvl ++ "; ACTUAL: " ++ show (length fs') ++
-                    "; CHOSE: " ++ show chosen' ++ " : " ++ show fs'
+  let d = hsep.punctuate semi $
+          [ text "LEVEL:" <+> (int lvl)
+          , text "ACTUAL:" <+> (int $ length fs')
+          , text "CHOSE:" <+> (int chosen')
+          , text "IRRED:" <+> (text $ show fs')
+          ]
+  modify (\st -> st{doc = doc st <$$> d})

@@ -17,6 +17,7 @@ import Math.FeatureReduction.Features (Features)
 import Network.Memcache.Protocol
 import System.Console.CmdArgs
 import System.IO
+import Text.PrettyPrint.ANSI.Leijen
 
 data LCAMeasure = FitMeasure | DistMeasure
     deriving (Show,Data,Typeable)
@@ -49,6 +50,7 @@ data LCA = LCA
     , pipes :: Pipes
     , numCalls :: Int
     , longNames :: M.Map Int String
+    , doc :: Doc
     }
 
 lca = LCA
@@ -64,6 +66,7 @@ lca = LCA
   , pipes = undefined
   , numCalls = 0
   , longNames = M.empty
+  , doc = empty
   }
 
 type St = StateT LCA IO
