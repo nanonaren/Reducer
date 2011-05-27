@@ -28,10 +28,14 @@ import Text.PrettyPrint.ANSI.Leijen
 import Data.String.Utils (split)
 
 main = do
+  hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
   let lca' = lca{options = args}
-  evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-              setupFeatures >> summaryHeader >> runAll) lca'
+  case interactive args of
+    False -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+                         setupFeatures >> summaryHeader >> runAll) lca'
+    True -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+                         setupFeatures >> runInteractive) lca'
 
 runAll = do
   fs <- getFeatures
@@ -40,9 +44,34 @@ runAll = do
   nruns <- gets (runs.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) target fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
+
+runInteractive = do
+  fs <- getFeatures
+  target <- gets (fromIntegral.maxFits.options)
+  numSamples <- gets (samples.options)
+  let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
+              liftIO newStdGen >>=
+              runR fs myPhi numSamples myFoundIrreducible chooser target fs >>=
+              summaryRun i.diff fs
+  run 1
+
+chooser fs lvl = do
+  names <- toNodeNames fs
+  fs' <- toLongNames names
+  let d = hsep.punctuate semi $
+          [ text "LEVEL:" <+> (int lvl)
+          , text "ACTUAL:" <+> (int $ length fs')
+          , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
+          ]
+  lift $ print d
+  lift.putStr $ "Enter node number to choose: "
+  val <- fmap read (lift $ hGetLine stdin)
+  case elem val names of
+    True -> fromNodeNames [val] >>= return.(\x -> Just x).head.toList
+    False -> lift (putStrLn "You choose an invalid element. Auto choosing.") >> return Nothing
 
 summaryHeader :: St ()
 summaryHeader = do

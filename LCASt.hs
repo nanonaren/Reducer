@@ -38,6 +38,7 @@ data Options = Options
     , knownChildren :: String
     , runs :: Int
     , samples :: Int
+    , interactive :: Bool
     } deriving (Show,Data,Typeable)
 
 data LCA = LCA
@@ -90,6 +91,7 @@ opts = Options
   , knownChildren = def &= help "Known children"
   , runs = 1 &= help "Number of runs" &= typ "INT"
   , samples = 20 &= help "Number of samples" &= typ "INT"
+  , interactive = False &= help "Enable to choose element from irreducible"
   }
 
 incCallCount :: St ()
