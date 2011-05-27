@@ -6,6 +6,7 @@ module Math.FeatureReduction.Stochastic
 import Control.Monad.Reader
 import Control.Monad.Random hiding (split,fromList)
 import Data.List (partition)
+import Data.Maybe (fromJust)
 import Math.FeatureReduction.Features
 import Math.FeatureReduction.BaseSt (Phi,Value)
 import NanoUtils.Set (randPick)
@@ -15,12 +16,13 @@ data Env m = Env
       psi :: Features -> m Value
     , numSamples :: Int
     , foundIrreducible :: Features -> Int -> Int -> m ()
+    , chooseElement :: Features -> Int -> m (Maybe Int)
     }
 
 type R g m = RandT g (ReaderT (Env m) m)
 
-runR allFeatures phi numSamples call target fs gen = runReaderT runRand env
-    where env = Env (toPsi allFeatures phi target) numSamples call
+runR allFeatures phi numSamples call choose target fs gen = runReaderT runRand env
+    where env = Env (toPsi allFeatures phi target) numSamples call choose
           runRand = evalRandT (complete fs) gen
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
@@ -72,9 +74,13 @@ pickElement :: (RandomGen g, Monad m) => Int -> [Features] -> R g m (Maybe (Int,
 pickElement _ [] = return Nothing
 pickElement lvl (f:fs) = do
   s <- score f
+  choose <- lift $ asks chooseElement
   case s > 0 of
     True -> getIrreducible f >>= \irred ->
-            wrapRand (randPick (size irred) (toList irred)) >>= \(p,_) ->
+            lift (lift $ choose irred lvl) >>= \c ->
+            (if c == Nothing
+             then wrapRand (randPick (size irred) (toList irred))
+             else return (fromJust c,[])) >>= \(p,_) ->
             reportIrreducible irred p lvl >>
             return (Just (p,size irred))
     False -> pickElement lvl fs
