@@ -27,15 +27,21 @@ import Pipes
 import Text.PrettyPrint.ANSI.Leijen
 import Data.String.Utils (split)
 
+import Math.FeatureReduction.Greedy
+
 main = do
   hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
   let lca' = lca{options = args}
-  case interactive args of
-    False -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-                         setupFeatures >> summaryHeader >> runAll) lca'
-    True -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-                         setupFeatures >> runInteractive) lca'
+  stuff <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+                       setupFeatures >> getFeatures >>= \fs -> greedy fs myPhi 0 5 >>= \(fs',v) ->
+                       toNodeNames fs' >>= \names -> return (names,v)) lca'
+  print stuff
+--  case interactive args of
+--    False -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+--                         setupFeatures >> summaryHeader >> runAll) lca'
+--    True -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+--                         setupFeatures >> runInteractive) lca'
 
 runAll = do
   fs <- getFeatures
