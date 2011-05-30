@@ -104,8 +104,7 @@ getIrreducible fs = do
   case size fs of
     1 -> return fs
     _ -> do
-      lst <- leaveBunchOuts fs
-      sub <- firstM (\f -> score f >>= return.(>0)) lst
+      sub <- search fs (size fs) (size fs `div` 2) 1
       case sub of
         Nothing -> log "did not find any" >> return fs
         (Just fs') -> getIrreducible fs'
@@ -114,10 +113,19 @@ log str = do
   inf <- lift (asks info)
   lift (lift $ inf str)
 
-leaveBunchOuts :: (RandomGen g, Monad m) => Features -> R g m [Features]
-leaveBunchOuts fs = do
-  let sz = size fs `div` 2
-  wrapRand.sequence $ replicate 3 (randSubset sz fs)
+search fs sz _ 5 = log "Number of attempts expired" >> return Nothing
+search fs _ 0 _ = log "Hit 0" >> return Nothing
+search fs sz num attemptNum = do
+  log $ "Attempt #" ++ show attemptNum ++ "; trying to remove " ++ show num
+  lst <- leaveBunchOuts fs (sz - num)
+  sub <- firstM (\f -> score f >>= return.(>0)) lst
+  case sub of
+    Nothing -> search fs sz (num `div` 2) (attemptNum+1)
+    Just fs' -> log "Succeeded" >> return (Just fs')
+
+leaveBunchOuts :: (RandomGen g, Monad m) => Features -> Int -> R g m [Features]
+leaveBunchOuts fs num = do
+  wrapRand.sequence $ replicate 10 (randSubset num fs)
 
 reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> Int -> R g m ()
 reportIrreducible fs p lvl = do

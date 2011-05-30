@@ -116,7 +116,8 @@ summaryRun :: Int -> Features -> St ()
 summaryRun i fs = do
   d <- gets doc
   calls <- gets numCalls
-  nodes <- toNodeNames fs >>= toLongNames
+  remThese <- gets outs
+  nodes <- toNodeNames (diff fs remThese) >>= toLongNames
   liftIO.print $
         text "===== Run" <+> int i <+> text "=====" <$$>
         param "Num calls" (int calls) <$$>
