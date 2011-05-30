@@ -59,7 +59,7 @@ runInteractive = do
   numSamples <- gets (samples.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible chooser clearRemaining info addToOuts target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible chooser (return False) info addToOuts target fs >>=
               summaryRun i.diff fs
   run 1
 

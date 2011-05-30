@@ -4,13 +4,16 @@ module Math.FeatureReduction.Stochastic
     ) where
 
 import Prelude hiding (log)
-import Control.Monad.Reader
+--import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Random hiding (split,fromList)
 import Data.List (partition)
 import Data.Maybe (fromJust)
 import Math.FeatureReduction.Features
 import Math.FeatureReduction.BaseSt (Phi,Value)
 import NanoUtils.Set (randPick)
+import Avg
+import Data.Monoid
 
 data Env m = Env
     {
@@ -21,12 +24,13 @@ data Env m = Env
     , clearRemaining :: m Bool
     , info :: String -> m ()
     , leftOut :: Features -> m ()
+    , reductionFactor :: Avg Double
     }
 
-type R g m = RandT g (ReaderT (Env m) m)
+type R g m = RandT g (StateT (Env m) m)
 
-runR allFeatures phi numSamples call choose clear info out target fs gen = runReaderT runRand env
-    where env = Env (toPsi allFeatures phi target) numSamples call choose clear info out
+runR allFeatures phi numSamples call choose clear info out target fs gen = evalStateT runRand env
+    where env = Env (toPsi allFeatures phi target) numSamples call choose clear info out (Avg (1,2))
           runRand = evalRandT (complete fs) gen
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
@@ -39,8 +43,8 @@ complete fs = do
 
 complete' lvl fs = do
   stop <- stopAlg fs
-  clear <- lift (asks clearRemaining)
-  out <- lift (asks leftOut)
+  clear <- lift (gets clearRemaining)
+  out <- lift (gets leftOut)
   case stop of
     True -> return fs
     False -> sample lvl fs >>= \res ->
@@ -78,7 +82,7 @@ evalAndPart fss = do
 sample :: (RandomGen g,Monad m) => Int -> Features ->
           R g m (Maybe (Int,Features))
 sample k fs = do
-  num <- lift $ asks (numSamples)
+  num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement k sets
 
@@ -87,7 +91,7 @@ pickElement :: (RandomGen g, Monad m) => Int -> [Features] ->
 pickElement _ [] = return Nothing
 pickElement lvl (f:fs) = do
   s <- score f
-  choose <- lift $ asks chooseElement
+  choose <- lift $ gets chooseElement
   case s > 0 of
     True -> getIrreducible f >>= \irred ->
             lift (lift $ choose irred lvl) >>= \c ->
@@ -104,24 +108,38 @@ getIrreducible fs = do
   case size fs of
     1 -> return fs
     _ -> do
-      sub <- search fs (size fs) (size fs `div` 2) 1
+      sub <- search fs
       case sub of
         Nothing -> log "did not find any" >> return fs
         (Just fs') -> getIrreducible fs'
 
 log str = do
-  inf <- lift (asks info)
+  inf <- lift (gets info)
   lift (lift $ inf str)
 
-search fs sz _ 5 = log "Number of attempts expired" >> return Nothing
-search fs _ 0 _ = log "Hit 0" >> return Nothing
-search fs sz num attemptNum = do
+search fs = do
+  let sz = size fs
+  factor <- lift (gets reductionFactor)
+  log $ "Using factor: " ++ show factor
+  search' fs sz (floor $ fromIntegral sz / getAvg factor) 1
+search' fs sz _ 5 = log "Number of attempts expired" >> return Nothing
+search' fs _ 0 _ = log "Hit 0" >> return Nothing
+search' fs sz num attemptNum = do
   log $ "Attempt #" ++ show attemptNum ++ "; trying to remove " ++ show num
   lst <- leaveBunchOuts fs (sz - num)
   sub <- firstM (\f -> score f >>= return.(>0)) lst
+  let nextNum = let n = num `div` 2
+                in if n == 0 then 1 else n
   case sub of
-    Nothing -> search fs sz (num `div` 2) (attemptNum+1)
-    Just fs' -> log "Succeeded" >> return (Just fs')
+    Nothing -> search' fs sz nextNum (attemptNum+1)
+    Just fs' -> log "Succeeded" >>
+                adjustFactor sz num >>
+                return (Just fs')
+
+adjustFactor sz num = do
+  let fac = fromIntegral sz / fromIntegral num
+  red <- lift (gets reductionFactor)
+  lift $ modify (\st -> st{reductionFactor = red `mappend` Avg (1,fac)})
 
 leaveBunchOuts :: (RandomGen g, Monad m) => Features -> Int -> R g m [Features]
 leaveBunchOuts fs num = do
@@ -129,13 +147,13 @@ leaveBunchOuts fs num = do
 
 reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> Int -> R g m ()
 reportIrreducible fs p lvl = do
-  call <- lift $ asks foundIrreducible
+  call <- lift $ gets foundIrreducible
   lift.lift $ call fs p lvl
 
 wrapRand act = getSplit >>= return.evalRand act
 
 score fs = do
-  f <- lift $ asks psi
+  f <- lift $ gets psi
   lift.lift.f $ fs
 
 toPsi :: Monad m => Features -> Phi m -> Value -> (Features -> m Value)
