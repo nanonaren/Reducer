@@ -9,12 +9,13 @@ module LCASt
     , opts
     , incCallCount
     , getFeatures
+    , addToOuts
     ) where
 
 import Pipes
 import Control.Monad.State
 import qualified Data.Map as M
-import Math.FeatureReduction.Features (Features,fromList)
+import Math.FeatureReduction.Features (Features,fromList,union)
 import Network.Memcache.Protocol
 import System.Console.CmdArgs
 import System.IO
@@ -25,7 +26,7 @@ data LCAMeasure = FitMeasure | DistMeasure
 
 data Options = Options
     {
-      maxFits :: Int
+      maxFits :: Double
     , dataFile :: FilePath
     , nnlsPath :: FilePath
     , rscriptPath :: FilePath
@@ -55,6 +56,7 @@ data LCA = LCA
     , numCalls :: Int
     , longNames :: M.Map Int String
     , doc :: Doc
+    , outs :: Features
     }
 
 lca = LCA
@@ -71,6 +73,7 @@ lca = LCA
   , numCalls = 0
   , longNames = M.empty
   , doc = empty
+  , outs = fromList []
   }
 
 type St = StateT LCA IO
@@ -99,3 +102,6 @@ incCallCount = modify (\st -> st{numCalls = numCalls st + 1})
 
 getFeatures :: St Features
 getFeatures = gets (\st -> toFeatures st.M.keys.revNames $ st)
+
+addToOuts :: Features -> St ()
+addToOuts fs = modify (\st -> st{outs = outs st `union` fs})

@@ -3,6 +3,7 @@ module Math.FeatureReduction.Stochastic
       runR
     ) where
 
+import Prelude hiding (log)
 import Control.Monad.Reader
 import Control.Monad.Random hiding (split,fromList)
 import Data.List (partition)
@@ -17,31 +18,41 @@ data Env m = Env
     , numSamples :: Int
     , foundIrreducible :: Features -> Int -> Int -> m ()
     , chooseElement :: Features -> Int -> m (Maybe Int)
+    , clearRemaining :: m Bool
+    , info :: String -> m ()
+    , leftOut :: Features -> m ()
     }
 
 type R g m = RandT g (ReaderT (Env m) m)
 
-runR allFeatures phi numSamples call choose target fs gen = runReaderT runRand env
-    where env = Env (toPsi allFeatures phi target) numSamples call choose
+runR allFeatures phi numSamples call choose clear info out target fs gen = runReaderT runRand env
+    where env = Env (toPsi allFeatures phi target) numSamples call choose clear info out
           runRand = evalRandT (complete fs) gen
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
 complete fs = do
---  complete' 1 fs
-  fs' <- level1 fs
-  if size fs' == 0
-   then return fs'
-   else complete' 2 fs'
+  complete' 300 fs
+--  fs' <- level1 fs
+--  if size fs' == 0
+--   then return fs'
+--   else complete' 2 fs'
 
 complete' lvl fs = do
   stop <- stopAlg fs
+  clear <- lift (asks clearRemaining)
+  out <- lift (asks leftOut)
   case stop of
     True -> return fs
     False -> sample lvl fs >>= \res ->
              case res of
                Nothing -> complete' nextLvl fs
-               Just (x,lvl') -> let fs' = diff fs (fromList [x])
-                                in complete' lvl' fs'
+               Just (x,irred) -> do
+                        b <- lift (lift clear)
+                        let fs' = if b then diff fs irred
+                                  else diff fs (fromList [x])
+                            lvl' = if b then lvl - size irred else lvl-1
+                        when b (lift.lift $ out (diff fs (fromList [x])))
+                        complete' lvl' fs'
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs
                      else floor (fromIntegral lvl*1.6)
@@ -64,13 +75,15 @@ evalAndPart fss = do
   xs <- mapM score fss >>= return.zip fss
   return.map fst.fst.partition ((>0).snd) $ xs
 
-sample :: (RandomGen g,Monad m) => Int -> Features -> R g m (Maybe (Int,Int))
+sample :: (RandomGen g,Monad m) => Int -> Features ->
+          R g m (Maybe (Int,Features))
 sample k fs = do
   num <- lift $ asks (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement k sets
 
-pickElement :: (RandomGen g, Monad m) => Int -> [Features] -> R g m (Maybe (Int,Int))
+pickElement :: (RandomGen g, Monad m) => Int -> [Features] ->
+               R g m (Maybe (Int,Features))
 pickElement _ [] = return Nothing
 pickElement lvl (f:fs) = do
   s <- score f
@@ -82,18 +95,29 @@ pickElement lvl (f:fs) = do
              then wrapRand (randPick (size irred) (toList irred))
              else return (fromJust c,[])) >>= \(p,_) ->
             reportIrreducible irred p lvl >>
-            return (Just (p,size irred))
+            return (Just (p,irred))
     False -> pickElement lvl fs
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
 getIrreducible fs = do
+  log $ "in getIrreducible with size " ++ show (size fs)
   case size fs of
     1 -> return fs
     _ -> do
-      sub <- firstM (\f -> score f >>= return.(>0)) (leaveOneOuts fs)
+      lst <- leaveBunchOuts fs
+      sub <- firstM (\f -> score f >>= return.(>0)) lst
       case sub of
-        Nothing -> return fs
+        Nothing -> log "did not find any" >> return fs
         (Just fs') -> getIrreducible fs'
+
+log str = do
+  inf <- lift (asks info)
+  lift (lift $ inf str)
+
+leaveBunchOuts :: (RandomGen g, Monad m) => Features -> R g m [Features]
+leaveBunchOuts fs = do
+  let sz = size fs `div` 2
+  wrapRand.sequence $ replicate 3 (randSubset sz fs)
 
 reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> Int -> R g m ()
 reportIrreducible fs p lvl = do

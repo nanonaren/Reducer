@@ -33,36 +33,37 @@ main = do
   hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
   let lca' = lca{options = args}
-  stuff <- evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
-                       setupFeatures >> getFeatures >>= \fs -> greedy fs myPhi 0 5 >>= \(fs',v) ->
-                       toNodeNames fs' >>= \names -> return (names,v)) lca'
-  print stuff
---  case interactive args of
---    False -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
---                         setupFeatures >> summaryHeader >> runAll) lca'
---    True -> evalStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
---                         setupFeatures >> runInteractive) lca'
+  useThis <- execStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+                         setupFeatures) lca'
+--  stuff <- evalStateT (getFeatures >>= \fs -> greedy fs myPhi 0 5 >>= \(fs',v) ->
+--                       toNodeNames fs' >>= \names -> gets numCalls >>= \num -> return (num,names,v)) useThis
+--  print stuff
+  case interactive args of
+    False -> evalStateT (summaryHeader >> runAll) useThis
+    True -> evalStateT (runInteractive) useThis
 
 runAll = do
   fs <- getFeatures
-  target <- gets (fromIntegral.maxFits.options)
+  target <- gets (maxFits.options)
   numSamples <- gets (samples.options)
   nruns <- gets (runs.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) (return False) info addToOuts 198 fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
 runInteractive = do
   fs <- getFeatures
-  target <- gets (fromIntegral.maxFits.options)
+  target <- gets (maxFits.options)
   numSamples <- gets (samples.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible chooser target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible chooser clearRemaining info addToOuts target fs >>=
               summaryRun i.diff fs
   run 1
+
+info = lift.putStrLn
 
 chooser fs lvl = do
   names <- toNodeNames fs
@@ -79,6 +80,13 @@ chooser fs lvl = do
     True -> fromNodeNames [val] >>= return.(\x -> Just x).head.toList
     False -> lift (putStrLn "You choose an invalid element. Auto choosing.") >> return Nothing
 
+clearRemaining = do
+  lift $ putStr "Removing rest of nodes in irreducible? [y/n]"
+  ln <- lift $ hGetLine stdin
+  case ln of
+    "y" -> return True
+    _   -> return False
+
 summaryHeader :: St ()
 summaryHeader = do
   fs <- fmap toList getFeatures
@@ -87,7 +95,7 @@ summaryHeader = do
   nruns <- gets (runs.options)
 
   rootN <- gets root
-  ((_,coeffs):_) <- nnlsMap rootN [fs]
+  ((val,coeffs):_) <- nnlsMap rootN [fs]
   fromNNLS <- (>>= toLongNames).toNodeNames.fromList.map fst.
               filter ((>0).snd).zip fs $ coeffs
 
@@ -95,6 +103,7 @@ summaryHeader = do
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
         param "Raw NNLS" (listNodes fromNNLS) <$$>
+        param "Raw NNLS val" (double val) <$$>
         param "Number of nodes used" (int $ length fs) <$$>
         param "Number of runs" (int nruns) <$$> text ""
 
