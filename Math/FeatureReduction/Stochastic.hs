@@ -37,7 +37,10 @@ runR allFS phi numSamples call choose info target fs gen =
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
 complete fs = do
-  complete' 300 fs
+  let sz = size fs
+  when (sz <= 10) (error "Number of features less than 11")
+  -- Just being incredibly lazy and annoying
+  complete' (size fs - 10) fs
 
 complete' lvl fs = do
   stop <- stopAlg fs
