@@ -45,7 +45,7 @@ Cabal-version:       >=1.2
 
 Library
   -- Modules exported by the library.
-  Exposed-modules:     Math.FeatureReduction.Base
+  Exposed-modules:     Math.FeatureReduction.Base, Math.FeatureReduction.Stochastic
   
   -- Packages needed in order to build this package.
   Build-depends:     base, bitset >= 1.1, mtl >= 2.0, transformers >= 0.2, NanoUtils >= 0.1, containers >= 0.4, MonadRandom >= 0.1.6
@@ -55,6 +55,10 @@ Library
   
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
   -- Build-tools:         
+
+Executable LCA
+  Main-Is: LCA.hs
+  Build-depends: MissingH >= 1.1, ansi-wl-pprint >= 0.6, process >= 1.0, parallel-io >= 0.3, stm >= 2.2, memcached >= 0.2.1, random-shuffle >= 0.0.2, random >= 1.0, cmdargs >= 0.7
 
 Executable test
   Main-Is: Math/FeatureReduction/TestAll.hs
