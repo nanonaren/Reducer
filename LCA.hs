@@ -35,12 +35,18 @@ main = do
   let lca' = lca{options = args}
   useThis <- execStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
                          setupFeatures) lca'
---  stuff <- evalStateT (getFeatures >>= \fs -> greedy fs myPhi 0 5 >>= \(fs',v) ->
---                       toNodeNames fs' >>= \names -> gets numCalls >>= \num -> return (num,names,v)) useThis
---  print stuff
+  when (bestfirst args) $ runBestFirst useThis
   case interactive args of
-    False -> evalStateT (summaryHeader >> runAll) useThis
-    True -> evalStateT (runInteractive) useThis
+    False -> when (mine args) $ evalStateT (summaryHeader >> runAll) useThis
+    True -> when (mine args) $ evalStateT (runInteractive) useThis
+
+runBestFirst lca = do
+  stuff <- evalStateT (getFeatures >>= \fs ->
+                       greedy fs myPhi 0 5 >>= \(fs',v) ->
+                       toNodeNames fs' >>= \names ->
+                       gets numCalls >>= \num ->
+                       return (num,names,v)) lca
+  print stuff
 
 runAll = do
   fs <- getFeatures
