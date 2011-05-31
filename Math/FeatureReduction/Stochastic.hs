@@ -3,21 +3,23 @@ module Math.FeatureReduction.Stochastic
       runR
     ) where
 
+import Avg
 import Prelude hiding (log)
---import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Random hiding (split,fromList)
-import Data.List (partition)
+import Data.List (partition,maximumBy)
 import Data.Maybe (fromJust)
+import Data.Monoid
+import Data.Ord
 import Math.FeatureReduction.Features
 import Math.FeatureReduction.BaseSt (Phi,Value)
 import NanoUtils.Set (randPick)
-import Avg
-import Data.Monoid
 
 data Env m = Env
     {
-      psi :: Features -> m Value
+      phi :: Features -> m Value
+    , psi :: Features -> m Value
+    , allFeatures :: Features
     , numSamples :: Int
     , foundIrreducible :: Features -> Int -> Int -> m ()
     , chooseElement :: Features -> Int -> m (Maybe Int)
@@ -27,19 +29,15 @@ data Env m = Env
 
 type R g m = RandT g (StateT (Env m) m)
 
-runR allFeatures phi numSamples call choose info target fs gen =
+runR allFS phi numSamples call choose info target fs gen =
     evalStateT runRand env
-    where env = Env (toPsi allFeatures phi target)
-                    numSamples call choose info (Avg (1,2))
+    where env = Env phi (toPsi allFS phi target)
+                    allFS numSamples call choose info (Avg (1,2))
           runRand = evalRandT (complete fs) gen
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
 complete fs = do
   complete' 300 fs
---  fs' <- level1 fs
---  if size fs' == 0
---   then return fs'
---   else complete' 2 fs'
 
 complete' lvl fs = do
   stop <- stopAlg fs
@@ -79,23 +77,33 @@ sample :: (RandomGen g,Monad m) => Int -> Features ->
 sample k fs = do
   num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
-  pickElement k sets
+  pickElement fs k sets
 
-pickElement :: (RandomGen g, Monad m) => Int -> [Features] ->
+pickElement :: (RandomGen g, Monad m) => Features -> Int -> [Features] ->
                R g m (Maybe (Int,Features))
-pickElement _ [] = return Nothing
-pickElement lvl (f:fs) = do
-  s <- score f
+pickElement fs lvl fss = do
+  s <- firstM (liftM (>0).score) fss
   choose <- lift $ gets chooseElement
-  case s > 0 of
-    True -> getIrreducible f >>= \irred ->
-            lift (lift $ choose irred lvl) >>= \c ->
-            (if c == Nothing
-             then wrapRand (randPick (size irred) (toList irred))
-             else return (fromJust c,[])) >>= \(p,_) ->
-            reportIrreducible irred p lvl >>
-            return (Just (p,irred))
-    False -> pickElement lvl fs
+  case s of
+    (Just f) -> getIrreducible f >>= \irred ->
+                lift (lift $ choose irred lvl) >>= \c ->
+               (if c == Nothing
+                then pickMax fs irred
+                else return (fromJust c)) >>= \p ->
+               reportIrreducible irred p lvl >>
+               return (Just (p,irred))
+    Nothing -> return Nothing
+
+pickMax fs irred = do
+  phiScore <- lift (gets phi)
+  case size irred of
+    1 -> return (head.toList $ irred)
+    _ -> do
+      current <- lift (gets (flip diff fs.allFeatures))
+      let iss = split 1 irred
+      scores <- mapM (lift.lift.phiScore.union current) $ iss
+      log $ "SCORES: " ++ show scores
+      return.head.toList.fst.maximumBy (comparing snd).zip iss $ scores
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
 getIrreducible fs = do
