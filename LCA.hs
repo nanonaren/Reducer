@@ -49,7 +49,7 @@ runAll = do
   nruns <- gets (runs.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) (return False) info addToOuts 198 fs >>=
+              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) info 198 fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
@@ -59,7 +59,7 @@ runInteractive = do
   numSamples <- gets (samples.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible chooser (return False) info addToOuts target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible chooser info target fs >>=
               summaryRun i.diff fs
   run 1
 
@@ -79,13 +79,6 @@ chooser fs lvl = do
   case elem val names of
     True -> fromNodeNames [val] >>= return.(\x -> Just x).head.toList
     False -> lift (putStrLn "You choose an invalid element. Auto choosing.") >> return Nothing
-
-clearRemaining = do
-  lift $ putStr "Removing rest of nodes in irreducible? [y/n]"
-  ln <- lift $ hGetLine stdin
-  case ln of
-    "y" -> return True
-    _   -> return False
 
 summaryHeader :: St ()
 summaryHeader = do
@@ -116,8 +109,7 @@ summaryRun :: Int -> Features -> St ()
 summaryRun i fs = do
   d <- gets doc
   calls <- gets numCalls
-  remThese <- gets outs
-  nodes <- toNodeNames (diff fs remThese) >>= toLongNames
+  nodes <- toNodeNames fs >>= toLongNames
   liftIO.print $
         text "===== Run" <+> int i <+> text "=====" <$$>
         param "Num calls" (int calls) <$$>

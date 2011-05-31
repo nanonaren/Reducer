@@ -21,16 +21,16 @@ data Env m = Env
     , numSamples :: Int
     , foundIrreducible :: Features -> Int -> Int -> m ()
     , chooseElement :: Features -> Int -> m (Maybe Int)
-    , clearRemaining :: m Bool
     , info :: String -> m ()
-    , leftOut :: Features -> m ()
     , reductionFactor :: Avg Double
     }
 
 type R g m = RandT g (StateT (Env m) m)
 
-runR allFeatures phi numSamples call choose clear info out target fs gen = evalStateT runRand env
-    where env = Env (toPsi allFeatures phi target) numSamples call choose clear info out (Avg (1,2))
+runR allFeatures phi numSamples call choose info target fs gen =
+    evalStateT runRand env
+    where env = Env (toPsi allFeatures phi target)
+                    numSamples call choose info (Avg (1,2))
           runRand = evalRandT (complete fs) gen
 
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
@@ -43,19 +43,14 @@ complete fs = do
 
 complete' lvl fs = do
   stop <- stopAlg fs
-  clear <- lift (gets clearRemaining)
-  out <- lift (gets leftOut)
   case stop of
     True -> return fs
     False -> sample lvl fs >>= \res ->
              case res of
                Nothing -> complete' nextLvl fs
                Just (x,irred) -> do
-                        b <- lift (lift clear)
-                        let fs' = if b then diff fs irred
-                                  else diff fs (fromList [x])
-                            lvl' = if b then lvl - size irred else lvl-1
-                        when b (lift.lift $ out (diff fs (fromList [x])))
+                        let fs' = diff fs (fromList [x])
+                            lvl' = lvl-1
                         complete' lvl' fs'
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs

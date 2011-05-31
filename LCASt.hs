@@ -9,7 +9,6 @@ module LCASt
     , opts
     , incCallCount
     , getFeatures
-    , addToOuts
     ) where
 
 import Pipes
@@ -56,7 +55,6 @@ data LCA = LCA
     , numCalls :: Int
     , longNames :: M.Map Int String
     , doc :: Doc
-    , outs :: Features
     }
 
 lca = LCA
@@ -73,7 +71,6 @@ lca = LCA
   , numCalls = 0
   , longNames = M.empty
   , doc = empty
-  , outs = fromList []
   }
 
 type St = StateT LCA IO
@@ -102,6 +99,3 @@ incCallCount = modify (\st -> st{numCalls = numCalls st + 1})
 
 getFeatures :: St Features
 getFeatures = gets (\st -> toFeatures st.M.keys.revNames $ st)
-
-addToOuts :: Features -> St ()
-addToOuts fs = modify (\st -> st{outs = outs st `union` fs})
