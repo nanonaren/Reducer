@@ -35,6 +35,19 @@ runR allFS phi numSamples call choose info target fs gen =
                     allFS numSamples call choose info (Avg (1,2))
           runRand = evalRandT (complete fs) gen
 
+--search min curr max fs history = do
+--  docurrent
+  --Each time log the following:
+  --1. attempting value
+  --2. attempted value
+  --3. reduction ratio [size fs : size found]
+  --Store the following in history
+  --1. is a map with key = iteration number
+  --2. value = (attempted value, found value,num features used)
+--  case val >= curr of
+--    True -> search min' curr' max fs history'
+--    False -> search min curr' max' fs history'
+
 complete :: (RandomGen g, Monad m) => Features -> R g m Features
 complete fs = do
   let sz = size fs
