@@ -1,0 +1,10 @@
+*.o
+*.hi
+*~
+*#
+*.sh
+data
+dist
+output
+svm
+LCA
