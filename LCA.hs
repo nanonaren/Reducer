@@ -40,13 +40,13 @@ main = do
     False -> when (mine args) $ evalStateT (summaryHeader >> runAll) useThis
     True -> when (mine args) $ evalStateT (runInteractive) useThis
 
-runBestFirst lca = do
+runBestFirst lca = undefined {-do
   stuff <- evalStateT (getFeatures >>= \fs ->
                        greedy fs myPhi 0 5 >>= \(fs',v) ->
                        toNodeNames fs' >>= \names ->
                        gets numCalls >>= \num ->
                        return (num,names,v)) lca
-  print stuff
+  print stuff-}
 
 runAll = do
   fs <- getFeatures
