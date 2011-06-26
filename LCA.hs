@@ -33,11 +33,13 @@ main = do
   hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
   let lca' = lca{options = args}
-  useThis <- execStateT (setupCache >> setupR >> setupNodes >> loadLongNames >>
+  useThis <- execStateT (setupCache >> setupR >>
+                         setupNodes >> loadLongNames >>
                          setupFeatures) lca'
   when (bestfirst args) $ runBestFirst useThis
   case interactive args of
-    False -> when (mine args) $ evalStateT (summaryHeader >> runAll) useThis
+    False -> when (mine args) $
+             evalStateT (summaryHeader >> runAll) useThis
     True -> when (mine args) $ evalStateT (runInteractive) useThis
 
 runBestFirst lca = undefined {-do
@@ -55,7 +57,8 @@ runAll = do
   nruns <- gets (runs.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible (\_ _ -> return Nothing) info 198 fs >>=
+              runR fs myPhi numSamples myFoundIrreducible
+                   (\_ _ -> return Nothing) info 198 fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
@@ -65,7 +68,8 @@ runInteractive = do
   numSamples <- gets (samples.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
-              runR fs myPhi numSamples myFoundIrreducible chooser info target fs >>=
+              runR fs myPhi numSamples myFoundIrreducible
+                   chooser info target fs >>=
               summaryRun i.diff fs
   run 1
 
@@ -149,16 +153,16 @@ setupCache = do
 setupNodes :: St ()
 setupNodes = do
   st <- gets options
-  allnms <- fmap (M.fromList.flip zip [1..].map (head.words).lines) $
-            liftIO (readFile (namesFile st))
-  mustInc <- fmap (map (head.words).lines) $
-             liftIO (readFile (mustInclude st))
-  --select required random nodes
+  mustInc <- fmap (map (head.words).lines) $ liftIO (readFile (mustInclude st))
+  mustIncCat <- fmap (map (head.words).lines) $ liftIO (readFile (mustIncludeCat st))
+  allnmsList <- fmap (flip zip [1..].map words.lines) $
+                liftIO (readFile (namesFile st))
+  let allnms = M.fromList.map (\(xs,i) -> (head xs,i)) $
+               filter (flip elem mustInc.head.fst) allnmsList ++
+               filter (flip elem mustIncCat.last.fst) allnmsList
+
   gen <- liftIO newStdGen
-  let notRequired = M.keys allnms \\ mustInc
-      randNodes = take (numRandomNodes st) $
-                  shuffle' notRequired (length notRequired) gen
-      names = M.filterWithKey (\k _ -> elem k mustInc || elem k randNodes) allnms
+  let names = allnms
       revNames = M.fromList.map swap.M.toList $ names
       rootNum = fromJust.M.lookup (rootNode st) $ names
       names' = M.delete (rootNode st) names

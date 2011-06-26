@@ -32,6 +32,7 @@ data Options = Options
     , rootNode :: String
     , delta :: Double
     , mustInclude :: FilePath
+    , mustIncludeCat :: FilePath
     , numRandomNodes :: Int
     , namesFile :: FilePath
     , measure :: LCAMeasure
@@ -85,7 +86,8 @@ opts = Options
   , rscriptPath = "/usr/bin/Rscript" &= help "Rscript path" &= typFile
   , rootNode = def &= help "Root node" &= typ "INT"
   , delta = 0.15 &= help "Allowable fit error" &= typ "DOUBLE"
-  , mustInclude = "/home/narens/work/lca/data/76names.tab" &= help "Must include nodes" &= typFile
+  , mustInclude = "/home/narens/work/chinese/data/includenodes" &= help "Must include nodes" &= typFile
+  , mustIncludeCat = "/home/narens/work/chinese/data/includecat" &= help "Must include categories" &= typFile
   , numRandomNodes = 0 &= help "Number of extra random nodes to include" &= typ "INT"
   , namesFile = "/home/narens/work/lca/data/allnames.tab" &= help "Node names file" &= typFile
   , measure = enum [FitMeasure &= help "Use fits to measure closeness",

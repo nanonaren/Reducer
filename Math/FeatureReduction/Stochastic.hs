@@ -156,7 +156,7 @@ search' fs sz num attemptNum = do
                 return (Just fs')
 
 adjustFactor sz num = do
-  let fac = fromIntegral sz / fromIntegral num
+  let fac = 0.9 * (fromIntegral sz / fromIntegral num)
   red <- lift (gets reductionFactor)
   lift $ modify (\st -> st{reductionFactor = red `mappend` Avg (1,fac)})
 
