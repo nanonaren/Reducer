@@ -82,7 +82,7 @@ opts = Options
   {
     maxFits = 198 &= help "Number of impact factors"
   , dataFile = "data/allnodes.tab" &= help "Data file" &= typFile
-  , nnlsPath = "/home/narens/Downloads/nnls" &= help "NNLS library path" &= typDir
+  , nnlsPath = "data/nnls" &= help "NNLS library path" &= typDir
   , rscriptPath = "/usr/bin/Rscript" &= help "Rscript path" &= typFile
   , rootNode = def &= help "Root node" &= typ "INT"
   , delta = 0.15 &= help "Allowable fit error" &= typ "DOUBLE"
@@ -94,7 +94,7 @@ opts = Options
                     DistMeasure &= help "Use distance to measure closeness"]
   , knownChildren = def &= help "Known children"
   , runs = 1 &= help "Number of runs" &= typ "INT"
-  , samples = 20 &= help "Number of samples" &= typ "INT"
+  , samples = 5 &= help "Number of samples" &= typ "INT"
   , interactive = False &= help "Enable to choose element from irreducible"
   , bestfirst = False &= help "Run best first"
   , mine = False &= help "Run mine"

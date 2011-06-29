@@ -119,11 +119,14 @@ summaryRun :: Int -> Features -> St ()
 summaryRun i fs = do
   d <- gets doc
   calls <- gets numCalls
-  nodes <- toNodeNames fs >>= toLongNames
+  rootN <- gets root
+  ((val,coeffs):_) <- nnlsMap rootN [toList fs]
+  nodes <- toNodeNames fs >>= toLongNames >>= return.flip zip coeffs
   liftIO.print $
         text "===== Run" <+> int i <+> text "=====" <$$>
         param "Num calls" (int calls) <$$>
-        param "Discovered Tree" (listNodes nodes) <$$>
+        param "NNLS value" (double val) <$$>
+        param "Discovered Tree" (listNodesWithCoeffs nodes) <$$>
         param "Irreducibles" d <$$> text ""
 
 toLongNames :: [Int] -> St [String]
@@ -142,6 +145,7 @@ loadLongNames = do
 
 param name info = fill 30 (text name) <> colon <+> align info
 
+listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> double v)
 listNodes = vcat.map text
 
 setupCache :: St ()
