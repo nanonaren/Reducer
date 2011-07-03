@@ -40,7 +40,7 @@ main = do
   case interactive args of
     False -> when (mine args) $
              evalStateT (summaryHeader >> runAll) useThis
-    True -> when (mine args) $ evalStateT (runInteractive) useThis
+    True -> when (mine args) $ evalStateT (summaryHeader >> runInteractive) useThis
 
 runBestFirst lca = undefined {-do
   stuff <- evalStateT (getFeatures >>= \fs ->
@@ -92,22 +92,21 @@ chooser fs lvl = do
 
 summaryHeader :: St ()
 summaryHeader = do
-  fs <- fmap toList getFeatures
+  fs <- getFeatures
   tree <- gets (read.rootNode.options) >>= toLongName
   kchildren <- getKnownChildren
   nruns <- gets (runs.options)
 
-  rootN <- gets root
-  ((val,coeffs):_) <- nnlsMap rootN [fs]
+  (val,coeffs) <- myPhiWithCoeff fs
   fromNNLS <- (>>= toLongNames).toNodeNames.fromList.map fst.
-              filter ((>0).snd).zip fs $ coeffs
+              filter ((>0).snd).zip (toList fs) $ coeffs
 
   liftIO.print $
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
         param "Raw NNLS" (listNodes fromNNLS) <$$>
         param "Raw NNLS val" (double val) <$$>
-        param "Number of nodes used" (int $ length fs) <$$>
+        param "Number of nodes used" (int $ size fs) <$$>
         param "Number of runs" (int nruns) <$$> text ""
 
 getKnownChildren :: St [String]
@@ -119,8 +118,7 @@ summaryRun :: Int -> Features -> St ()
 summaryRun i fs = do
   d <- gets doc
   calls <- gets numCalls
-  rootN <- gets root
-  ((val,coeffs):_) <- nnlsMap rootN [toList fs]
+  (val,coeffs) <- myPhiWithCoeff fs
   nodes <- toNodeNames fs >>= toLongNames >>= return.flip zip coeffs
   liftIO.print $
         text "===== Run" <+> int i <+> text "=====" <$$>
@@ -145,7 +143,7 @@ loadLongNames = do
 
 param name info = fill 30 (text name) <> colon <+> align info
 
-listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> double v)
+listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> yellow (double v))
 listNodes = vcat.map text
 
 setupCache :: St ()
@@ -208,6 +206,12 @@ myPhiMap fss = do
   mapM_ (uncurry putInCache) $ zip xss vals
   sequence_.replicate (length fss) $ incCallCount
   return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
+
+myPhiWithCoeff :: Features -> St (Double,[Double])
+myPhiWithCoeff fs = do
+  root <- gets root
+  fromFS <- gets fromFeatures
+  fmap head.nnlsMap root.(:[]).fromFS $ fs
 
 myPhi fs = fmap head $ myPhiMap (fs:[])
 
