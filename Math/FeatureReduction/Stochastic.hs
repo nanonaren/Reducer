@@ -21,8 +21,8 @@ data Env m = Env
     , psi :: Features -> m Value
     , allFeatures :: Features
     , numSamples :: Int
-    , foundIrreducible :: Features -> Int -> Int -> m ()
-    , chooseElement :: Features -> Int -> m (Maybe Int)
+    , foundIrreducible :: Features -> [Int] -> Int -> m ()
+    , chooseElement :: Features -> Int -> m ([Int],[Int])
     , info :: String -> m ()
     , reductionFactor :: Avg Double
     }
@@ -53,19 +53,19 @@ complete fs = do
   let sz = size fs
   when (sz <= 10) (error "Number of features less than 11")
   -- Just being incredibly lazy and annoying
-  complete' (size fs - 10) fs
+  complete' (size fs - 5) fs (fromList [])
 
-complete' lvl fs = do
+complete' lvl fs ditched = do
   stop <- stopAlg fs
   case stop of
-    True -> return fs
+    True -> return (union fs ditched)
     False -> sample lvl fs >>= \res ->
              case res of
-               Nothing -> complete' nextLvl fs
-               Just (x,irred) -> do
-                        let fs' = diff fs (fromList [x])
+               Nothing -> complete' nextLvl fs ditched
+               Just (cs,ds,irred) -> do
+                        let fs' = diff fs (fromList $ cs++ds)
                             lvl' = lvl-1
-                        complete' lvl' fs'
+                        complete' lvl' fs' (union ditched (fromList ds))
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs
                      else floor (fromIntegral lvl*1.6)
@@ -77,37 +77,31 @@ stopAlg fs = do
     0 -> return True
     _ -> score fs >>= return.(==0)
 
-level1 :: (RandomGen g,Monad m) => Features -> R g m Features
-level1 fs = do
-  nonZeros <- evalAndPart.split 1 $ fs
-  mapM_ (\f -> reportIrreducible f (head $ toList f) 1) nonZeros
-  return.diff fs.unions $ nonZeros
-
 evalAndPart :: (RandomGen g,Monad m) => [Features] -> R g m [Features]
 evalAndPart fss = do
   xs <- mapM score fss >>= return.zip fss
   return.map fst.fst.partition ((>0).snd) $ xs
 
 sample :: (RandomGen g,Monad m) => Int -> Features ->
-          R g m (Maybe (Int,Features))
+          R g m (Maybe ([Int],[Int],Features))
 sample k fs = do
   num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement fs k sets
 
 pickElement :: (RandomGen g, Monad m) => Features -> Int -> [Features] ->
-               R g m (Maybe (Int,Features))
+               R g m (Maybe ([Int],[Int],Features))
 pickElement fs lvl fss = do
   s <- firstM (liftM (>0).score) fss
   choose <- lift $ gets chooseElement
   case s of
     (Just f) -> getIrreducible f >>= \irred ->
-                lift (lift $ choose irred lvl) >>= \c ->
-               (if c == Nothing
-                then pickMax fs irred
-                else return (fromJust c)) >>= \p ->
-               reportIrreducible irred p lvl >>
-               return (Just (p,irred))
+                lift (lift $ choose irred lvl) >>= \(cs,ds) ->
+               (if null cs
+                then pickMax fs irred >>= return.(:[])
+                else return cs) >>= \ps ->
+               reportIrreducible irred ps lvl >>
+               return (Just (ps,ds,irred))
     Nothing -> return Nothing
 
 pickMax fs irred = do
@@ -164,10 +158,10 @@ leaveBunchOuts :: (RandomGen g, Monad m) => Features -> Int -> R g m [Features]
 leaveBunchOuts fs num = do
   wrapRand.sequence $ replicate 10 (randSubset num fs)
 
-reportIrreducible :: (RandomGen g,Monad m) => Features -> Int -> Int -> R g m ()
-reportIrreducible fs p lvl = do
+reportIrreducible :: (RandomGen g,Monad m) => Features -> [Int] -> Int -> R g m ()
+reportIrreducible fs ps lvl = do
   call <- lift $ gets foundIrreducible
-  lift.lift $ call fs p lvl
+  lift.lift $ call fs ps lvl
 
 wrapRand act = getSplit >>= return.evalRand act
 

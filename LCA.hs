@@ -12,7 +12,7 @@ import NanoUtils.List (rsortOn,sortOn)
 import NanoUtils.Tuple (swap)
 
 import Control.Monad.State
-import Data.Maybe (fromJust,isNothing)
+import Data.Maybe (fromJust,isNothing,isJust)
 import Data.List
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -58,7 +58,7 @@ runAll = do
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
               runR fs myPhi numSamples myFoundIrreducible
-                   (\_ _ -> return Nothing) info 198 fs >>=
+                   (\_ _ -> return ([],[])) info 198 fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
@@ -84,11 +84,31 @@ chooser fs lvl = do
           , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
           ]
   lift $ print d
-  lift.putStr $ "Enter node number to choose: "
-  val <- fmap read (lift $ hGetLine stdin)
-  case elem val names of
-    True -> fromNodeNames [val] >>= return.(\x -> Just x).head.toList
-    False -> lift (putStrLn "You choose an invalid element. Auto choosing.") >> return Nothing
+
+  includes <- getInput "Enter node numbers to choose (space separated): " names
+  excludes <- getInput "Enter node numbers to discard (space separated): " names
+  return (includes,excludes)
+
+getInput str names = do
+  lift.putStr $ str
+  ws <- fmap words (lift $ hGetLine stdin)
+  lst <- lift $ mapM readMaybe ws
+  let missing = filter (not.flip elem names.fromJust).filter isJust $ lst
+      error = not.null.filter isNothing $ lst
+  case (error,null missing) of
+    (False,True) -> fmap toList (fromNodeNames.map fromJust $ lst)
+    (False,False) -> liftIO (print.yellow.text $
+                             "These nodes " ++ show missing ++
+                             " do not exist. Try again.") >>
+                     getInput str names
+    (True,_) -> liftIO (print.yellow.text $ "Error reading some nodes. Try again.") >>
+                getInput str names
+
+readMaybe :: String -> IO (Maybe Int)
+readMaybe str = do
+    case reads str of
+      [] -> print (yellow.text $ str ++ " not a valid number.") >> return Nothing
+      [(val,_)] -> return (Just val)
 
 summaryHeader :: St ()
 summaryHeader = do
@@ -233,14 +253,14 @@ lookupCache fs
 getKey :: Int -> Features -> String
 getKey root fs = show root ++ show (toNumber fs)
 
-myFoundIrreducible :: Features -> Int -> Int -> St ()
+myFoundIrreducible :: Features -> [Int] -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs >>= toLongNames
-  chosen' <- fmap head $ toNodeNames (fromList [chosen])
+  chosen' <- toNodeNames (fromList chosen)
   let d = hsep.punctuate semi $
           [ text "LEVEL:" <+> (int lvl)
           , text "ACTUAL:" <+> (int $ length fs')
-          , text "CHOSE:" <+> (int chosen')
+          , text "CHOSE:" <+> (hsep.punctuate comma.map int $ chosen')
           , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
           ]
   modify (\st -> st{doc = doc st <$$> d})
