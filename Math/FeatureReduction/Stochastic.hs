@@ -58,8 +58,8 @@ complete fs = do
 complete' lvl fs ditched = do
   stop <- stopAlg fs
   case stop of
-    True -> return (union fs ditched)
-    False -> sample lvl fs >>= \res ->
+    True -> log "Stopping..." >> return (union fs ditched)
+    False -> sample lvl ditched fs >>= \res ->
              case res of
                Nothing -> complete' nextLvl fs ditched
                Just (cs,ds,irred) -> do
@@ -82,34 +82,35 @@ evalAndPart fss = do
   xs <- mapM score fss >>= return.zip fss
   return.map fst.fst.partition ((>0).snd) $ xs
 
-sample :: (RandomGen g,Monad m) => Int -> Features ->
+sample :: (RandomGen g,Monad m) => Int -> Features -> Features ->
           R g m (Maybe ([Int],[Int],Features))
-sample k fs = do
+sample k ditched fs = do
   num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
-  pickElement fs k sets
+  pickElement ditched fs k sets
 
-pickElement :: (RandomGen g, Monad m) => Features -> Int -> [Features] ->
-               R g m (Maybe ([Int],[Int],Features))
-pickElement fs lvl fss = do
+pickElement :: (RandomGen g, Monad m) => Features -> Features -> Int ->
+               [Features] -> R g m (Maybe ([Int],[Int],Features))
+pickElement ditched fs lvl fss = do
   s <- firstM (liftM (>0).score) fss
   choose <- lift $ gets chooseElement
   case s of
     (Just f) -> getIrreducible f >>= \irred ->
                 lift (lift $ choose irred lvl) >>= \(cs,ds) ->
                (if null cs
-                then pickMax fs irred >>= return.(:[])
+                then pickMax (union ditched (fromList ds)) fs
+                             (diff irred (fromList ds)) >>= return.(:[])
                 else return cs) >>= \ps ->
                reportIrreducible irred ps lvl >>
                return (Just (ps,ds,irred))
     Nothing -> return Nothing
 
-pickMax fs irred = do
+pickMax ditched fs irred = do
   phiScore <- lift (gets phi)
   case size irred of
     1 -> return (head.toList $ irred)
     _ -> do
-      current <- lift (gets (flip diff fs.allFeatures))
+      current <- lift (gets (flip diff fs.flip diff ditched.allFeatures))
       let iss = split 1 irred
       scores <- mapM (lift.lift.phiScore.union current) $ iss
       log $ "SCORES: " ++ show scores

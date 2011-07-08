@@ -118,13 +118,13 @@ summaryHeader = do
   nruns <- gets (runs.options)
 
   (val,coeffs) <- myPhiWithCoeff fs
-  fromNNLS <- (>>= toLongNames).toNodeNames.fromList.map fst.
-              filter ((>0).snd).zip (toList fs) $ coeffs
+  nodes <- toNodeNames fs >>= toLongNames >>=
+           return.filter ((>0).snd).flip zip coeffs
 
   liftIO.print $
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
-        param "Raw NNLS" (listNodes fromNNLS) <$$>
+        param "Raw NNLS" (listNodesWithCoeffs nodes) <$$>
         param "Raw NNLS val" (double val) <$$>
         param "Number of nodes used" (int $ size fs) <$$>
         param "Number of runs" (int nruns) <$$> text ""
@@ -257,6 +257,8 @@ myFoundIrreducible :: Features -> [Int] -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs >>= toLongNames
   chosen' <- toNodeNames (fromList chosen)
+  lift.print.yellow $
+      text "Choosing:" <+> (hsep.punctuate comma.map int $ chosen')
   let d = hsep.punctuate semi $
           [ text "LEVEL:" <+> (int lvl)
           , text "ACTUAL:" <+> (int $ length fs')
