@@ -25,6 +25,7 @@ data Env m = Env
     , chooseElement :: Features -> Int -> m ([Int],[Int])
     , info :: String -> m ()
     , reductionFactor :: Avg Double
+    , rejected :: Features
     }
 
 type R g m = RandT g (StateT (Env m) m)
@@ -32,7 +33,7 @@ type R g m = RandT g (StateT (Env m) m)
 runR allFS phi numSamples call choose info target fs gen =
     evalStateT runRand env
     where env = Env phi (toPsi allFS phi target)
-                    allFS numSamples call choose info (Avg (1,2))
+                    allFS numSamples call choose info (Avg (1,2)) (fromList [])
           runRand = evalRandT (complete fs) gen
 
 --search min curr max fs history = do
@@ -56,6 +57,13 @@ complete fs = do
   complete' (size fs - 5) fs (fromList [])
 
 complete' lvl fs ditched = do
+  --check what score it is after ditching
+  allf <- gets allFeatures
+  phiScore <- lift $ gets phi
+  score <- lift.lift.phiScore $ diff allf ditched
+  log $ "***** SCORE AFTER DITCHING: " ++ show score
+  lift $ modify (\st -> st{rejected = ditched})
+
   stop <- stopAlg fs
   case stop of
     True -> log "Stopping..." >> return (union fs ditched)
@@ -64,7 +72,7 @@ complete' lvl fs ditched = do
                Nothing -> complete' nextLvl fs ditched
                Just (cs,ds,irred) -> do
                         let fs' = diff fs (fromList $ cs++ds)
-                            lvl' = lvl-1
+                            lvl' = (size fs') - 5
                         complete' lvl' fs' (union ditched (fromList ds))
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs
@@ -85,6 +93,7 @@ evalAndPart fss = do
 sample :: (RandomGen g,Monad m) => Int -> Features -> Features ->
           R g m (Maybe ([Int],[Int],Features))
 sample k ditched fs = do
+  log $ "***** LVL NUMBER: " ++ show k
   num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement ditched fs k sets
@@ -168,7 +177,8 @@ wrapRand act = getSplit >>= return.evalRand act
 
 score fs = do
   f <- lift $ gets psi
-  lift.lift.f $ fs
+  rej <- lift $ gets rejected
+  lift.lift.f.union rej $ fs
 
 toPsi :: Monad m => Features -> Phi m -> Value -> (Features -> m Value)
 toPsi fs phi target =
