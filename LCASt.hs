@@ -42,6 +42,7 @@ data Options = Options
     , interactive :: Bool
     , bestfirst :: Bool
     , mine :: Bool
+    , reducennls :: Bool
     } deriving (Show,Data,Typeable)
 
 data LCA = LCA
@@ -98,6 +99,7 @@ opts = Options
   , interactive = False &= help "Enable to choose element from irreducible"
   , bestfirst = False &= help "Run best first"
   , mine = False &= help "Run mine"
+  , reducennls = False &= help "Just reduce the positive nodes that nnls outputs"
   }
 
 incCallCount :: St ()

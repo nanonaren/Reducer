@@ -39,8 +39,11 @@ main = do
   when (bestfirst args) $ runBestFirst useThis
   case interactive args of
     False -> when (mine args) $
-             evalStateT (summaryHeader >> runAll) useThis
-    True -> when (mine args) $ evalStateT (summaryHeader >> runInteractive) useThis
+             evalStateT (summaryHeader >> getFeaturesForReduction >>=
+                         runAll) useThis
+    True -> when (mine args) $
+            evalStateT (summaryHeader >> getFeaturesForReduction >>=
+                        runInteractive) useThis
 
 runBestFirst lca = undefined {-do
   stuff <- evalStateT (getFeatures >>= \fs ->
@@ -50,20 +53,31 @@ runBestFirst lca = undefined {-do
                        return (num,names,v)) lca
   print stuff-}
 
-runAll = do
+getFeaturesForReduction :: St Features
+getFeaturesForReduction = do
   fs <- getFeatures
+  reduceNNLS <- gets (reducennls.options)
+  case reduceNNLS of
+    False -> return fs
+    True -> do
+      (val,coeffs) <- myPhiWithCoeff fs
+      let fs' = fromList.map fst.filter ((>0).snd).zip (toList fs) $ coeffs
+          maxFits' = val
+      modify (\st -> st{options=(options st){maxFits=maxFits'}})
+      return fs'
+
+runAll fs = do
   target <- gets (maxFits.options)
   numSamples <- gets (samples.options)
   nruns <- gets (runs.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
               runR fs myPhi numSamples myFoundIrreducible
-                   (\_ _ -> return ([],[])) info 198 fs >>=
+                   (\_ _ -> return ([],[])) info target fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
-runInteractive = do
-  fs <- getFeatures
+runInteractive fs = do
   target <- gets (maxFits.options)
   numSamples <- gets (samples.options)
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
@@ -73,8 +87,6 @@ runInteractive = do
               summaryRun i.diff fs
   run 1
 
--- info False str = lift.putStrLn $ str
---info True str = lift.hPutStrLn stderr $ str
 info = lift.putStr
 
 chooser fs lvl = do
