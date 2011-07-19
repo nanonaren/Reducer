@@ -15,7 +15,7 @@ nnlsMap root xss = do
   maxfits <- gets (maxFits.options)
   method <- gets (measure.options)
   delta <- gets (delta.options)
-  let cmds = map (\xs -> addCode method [1..maxfits] xs root delta) xss
+  let cmds = map (\xs -> addCode method [1..198] xs root delta) xss
   liftIO $ pushMap ps handler cmds
     where handler h = skipStupidLines h >>= \ln ->
                       let ws = words ln

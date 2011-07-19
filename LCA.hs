@@ -57,6 +57,10 @@ getFeaturesForReduction :: St Features
 getFeaturesForReduction = do
   fs <- getFeatures
   reduceNNLS <- gets (reducennls.options)
+  m <- gets (measure.options)
+  case m of
+    DistMeasure -> modify (\st -> st{options=(options st){maxFits=1}})
+    _ -> return ()
   case reduceNNLS of
     False -> return fs
     True -> do
@@ -183,7 +187,7 @@ listNodes = vcat.map text
 setupCache :: St ()
 setupCache = do
   st <- get
-  srvr <- liftIO $ connect "localhost" 11211
+  srvr <- liftIO $ connect "127.0.0.1" 11211
   put st{server = srvr}
 
 setupNodes :: St ()
@@ -251,21 +255,28 @@ myPhi fs = fmap head $ myPhiMap (fs:[])
 
 putInCache :: Features -> Double -> St ()
 putInCache fs val = do
-  root <- gets root
   srvr <- gets server
-  liftIO $ C.set srvr (getKey root fs) (show val)
+  m <- gets (measure.options)
+  key <- getKey fs
+  liftIO $ C.set srvr key (show val)
   return ()
 
 lookupCache :: Features -> St (Maybe Double)
 lookupCache fs
     | size fs == 0 = return (Just 0)
     | otherwise = do
-  root <- gets root
   srvr <- gets server
-  liftIO.fmap (fmap read) $ C.get srvr (getKey root fs)
+  key <- getKey fs
+  liftIO.fmap (fmap read) $ C.get srvr key
 
-getKey :: Int -> Features -> String
-getKey root fs = show root ++ show (toNumber fs)
+getKey :: Features -> St String
+getKey fs = do
+  root <- gets root
+  m <- gets (measure.options)
+  let str = show root ++ show (toNumber fs)
+  case m of
+    DistMeasure -> return ('d' : str)
+    FitMeasure -> return ('f' : str)
 
 myFoundIrreducible :: Features -> [Int] -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
