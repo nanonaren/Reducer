@@ -7,7 +7,7 @@ import Avg
 import Prelude hiding (log)
 import Control.Monad.State
 import Control.Monad.Random hiding (split,fromList)
-import Data.List (partition,maximumBy)
+import Data.List (partition,maximumBy,intercalate)
 import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Ord
@@ -54,9 +54,9 @@ complete fs = do
   let sz = size fs
   when (sz <= 10) (error "Number of features less than 11")
   -- Just being incredibly lazy and annoying
-  complete' (size fs - 5) fs (fromList [])
+  complete' (size fs - 5) fs (fromList []) []
 
-complete' lvl fs ditched = do
+complete' lvl fs ditched history = do
   --check what score it is after ditching
   allf <- gets allFeatures
   phiScore <- lift $ gets phi
@@ -69,15 +69,25 @@ complete' lvl fs ditched = do
     True -> {-logErr "Stopping..." >>-} return (union fs ditched)
     False -> sample lvl ditched fs >>= \res ->
              case res of
-               Nothing -> complete' nextLvl fs ditched
+               Nothing -> complete' nextLvl fs ditched history
                Just (cs,ds,irred) -> do
                         let fs' = diff fs (fromList $ cs++ds)
                             lvl' = (size fs') - 5
-                        complete' lvl' fs' (union ditched (fromList ds))
+                        history' <- calcHistory (union ditched$fromList ds) fs' history
+                        printHistory history'
+                        complete' lvl' fs' (union ditched (fromList ds)) history'
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs
                      else floor (fromIntegral lvl*1.6)
           sz = size
+
+calcHistory ditched fs history = do
+  phiScore <- lift $ gets phi
+  all <- lift $ gets allFeatures
+  val <- lift.lift $ phiScore (diff all $ union fs ditched)
+  return (history ++ [val])
+
+printHistory hs = log.("Solution history: "++).(++"\n").intercalate " ".map show $ hs
 
 stopAlg :: (RandomGen g,Monad m) => Features -> R g m Bool
 stopAlg fs = do
