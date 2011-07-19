@@ -61,12 +61,12 @@ complete' lvl fs ditched = do
   allf <- gets allFeatures
   phiScore <- lift $ gets phi
   score <- lift.lift.phiScore $ diff allf ditched
-  log $ "***** SCORE AFTER DITCHING: " ++ show score
+--  logErr $ "***** SCORE AFTER DITCHING: " ++ show score
   lift $ modify (\st -> st{rejected = ditched})
 
   stop <- stopAlg fs
   case stop of
-    True -> log "Stopping..." >> return (union fs ditched)
+    True -> {-logErr "Stopping..." >>-} return (union fs ditched)
     False -> sample lvl ditched fs >>= \res ->
              case res of
                Nothing -> complete' nextLvl fs ditched
@@ -93,7 +93,7 @@ evalAndPart fss = do
 sample :: (RandomGen g,Monad m) => Int -> Features -> Features ->
           R g m (Maybe ([Int],[Int],Features))
 sample k ditched fs = do
-  log $ "***** LVL NUMBER: " ++ show k
+  --logErr $ "***** LVL NUMBER: " ++ show k
   num <- lift $ gets (numSamples)
   sets <- wrapRand $ sequence (replicate num (randSubset k fs))
   pickElement ditched fs k sets
@@ -122,19 +122,27 @@ pickMax ditched fs irred = do
       current <- lift (gets (flip diff fs.flip diff ditched.allFeatures))
       let iss = split 1 irred
       scores <- mapM (lift.lift.phiScore.union current) $ iss
-      log $ "SCORES: " ++ show scores
+      --logErr $ "SCORES: " ++ show scores
       return.head.toList.fst.maximumBy (comparing snd).zip iss $ scores
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
-getIrreducible fs = do
-  log $ "in getIrreducible with size " ++ show (size fs)
+getIrreducible fs = getIrreducible' (size fs) fs 0
+getIrreducible' startSize fs prog = do
   case size fs of
-    1 -> return fs
-    _ -> do
+    1 -> progress prog startSize 1 >> log "\n" >> return fs
+    sz -> do
       sub <- search fs
       case sub of
-        Nothing -> log "did not find any" >> return fs
-        (Just fs') -> getIrreducible fs'
+        Nothing -> progress prog startSize sz >>
+                   log "\n" >> return fs
+        (Just fs') -> progress prog startSize (size fs') >>=
+                      getIrreducible' startSize fs'
+
+progress prog startSize curSize = do
+  let prog' = floor $
+              (fromIntegral (startSize-curSize) / fromIntegral startSize)*60
+  sequence_ $ replicate (prog'-prog) (log "=")
+  return prog'
 
 log str = do
   inf <- lift (gets info)
@@ -143,19 +151,19 @@ log str = do
 search fs = do
   let sz = size fs
   factor <- lift (gets reductionFactor)
-  log $ "Using factor: " ++ show factor
+  --logErr $ "Using factor: " ++ show factor
   search' fs sz (floor $ fromIntegral sz / getAvg factor) 1
-search' fs sz _ 5 = log "Number of attempts expired" >> return Nothing
-search' fs _ 0 _ = log "Hit 0" >> return Nothing
+search' fs sz _ 5 = {-logErr "Number of attempts expired" >>-} return Nothing
+search' fs _ 0 _ = {-logErr "Hit 0" >>-} return Nothing
 search' fs sz num attemptNum = do
-  log $ "Attempt #" ++ show attemptNum ++ "; trying to remove " ++ show num
+  --logErr $ "Attempt #" ++ show attemptNum ++ "; trying to remove " ++ show num
   lst <- leaveBunchOuts fs (sz - num)
   sub <- firstM (\f -> score f >>= return.(>0)) lst
   let nextNum = let n = num `div` 2
                 in if n == 0 then 1 else n
   case sub of
     Nothing -> search' fs sz nextNum (attemptNum+1)
-    Just fs' -> log "Succeeded" >>
+    Just fs' -> --logErr "Succeeded" >>
                 adjustFactor sz num >>
                 return (Just fs')
 

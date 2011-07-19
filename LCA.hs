@@ -73,7 +73,9 @@ runInteractive = do
               summaryRun i.diff fs
   run 1
 
-info = lift.putStrLn
+-- info False str = lift.putStrLn $ str
+--info True str = lift.hPutStrLn stderr $ str
+info = lift.putStr
 
 chooser fs lvl = do
   names <- toNodeNames fs
