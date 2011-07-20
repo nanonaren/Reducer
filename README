@@ -1,0 +1,28 @@
+Reduce number of nodes required to get a fit
+
+LCA Reducer [OPTIONS]
+
+Common flags:
+     --maxfits=NUM          Number of impact factors
+     --datafile=FILE        Data file
+     --nnlspath=DIR         NNLS library path
+     --rscriptpath=FILE     Rscript path
+     --rootnode=INT         Root node
+     --delta=DOUBLE         Allowable fit error
+     --mustinclude=FILE     Must include nodes
+     --mustincludecat=FILE  Must include categories
+     --numrandomnodes=INT   Number of extra random nodes to include
+     --namesfile=FILE       Node names file
+  -f --fitmeasure           Use fits to measure closeness
+     --distmeasure          Use distance to measure closeness
+  -k --knownchildren=ITEM   Known children
+     --runs=INT             Number of runs
+  -s --samples=INT          Number of samples
+  -i --interactive          Enable to choose element from irreducible
+  -b --bestfirst            Run best first
+     --mine                 Run mine
+     --reducennls           Just reduce the positive nodes that nnls outputs
+  -? --help                 Display help message
+  -V --version              Print version information
+
+http://github.com/nanonaren/Reducer

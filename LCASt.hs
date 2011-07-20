@@ -100,7 +100,9 @@ opts = Options
   , bestfirst = False &= help "Run best first"
   , mine = False &= help "Run mine"
   , reducennls = False &= help "Just reduce the positive nodes that nnls outputs"
-  }
+  } &= program "LCA Reducer"
+    &= summary "Reduce number of nodes required to get a fit"
+    &= details ["http://github.com/nanonaren/Reducer"]
 
 incCallCount :: St ()
 incCallCount = modify (\st -> st{numCalls = numCalls st + 1})
