@@ -9,7 +9,7 @@ import NNLS
 import Math.FeatureReduction.Stochastic
 import Math.FeatureReduction.Features hiding (split)
 import NanoUtils.List (rsortOn,sortOn)
-import NanoUtils.Tuple (swap)
+import NanoUtils.Tuple (swap,mapHomTup)
 
 import Control.Monad.State
 import Data.Maybe (fromJust,isNothing,isJust)
@@ -27,6 +27,7 @@ import Text.PrettyPrint.ANSI.Leijen
 import Data.String.Utils (split)
 
 import Math.FeatureReduction.Greedy
+import Numeric (showFFloat)
 
 main = do
   hSetBuffering stdout NoBuffering
@@ -163,6 +164,7 @@ summaryRun i fs = do
         param "NNLS value" (double val) <$$>
         param "Discovered Tree" (listNodesWithCoeffs nodes) <$$>
         param "Irreducibles" d <$$> text ""
+  probeSolution fs
 
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
@@ -290,3 +292,63 @@ myFoundIrreducible fs chosen lvl = do
           , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
           ]
   modify (\st -> st{doc = doc st <$$> d})
+
+
+
+
+
+probeSolution :: Features -> St ()
+probeSolution fs = do
+  root <- gets root
+  (_,coeffs) <- myPhiWithCoeff fs
+  nodeLineNums <- gets ((root:).($fs).fromFeatures)
+  file <- gets (dataFile.options)
+  rows <- fmap (filter (flip elem nodeLineNums.fst).
+                zip [1..].map words.lines).
+               lift.readFile $ file
+
+  let ((rootRow:_),childRows) = mapHomTup (map snd).
+                                partition ((==root).fst) $ rows
+      childData = zipWith (\c v -> map (c*) v) coeffs.
+                  map (map read) $ childRows
+      parentData = map read rootRow
+
+  probeSolution' (parentData : childData) coeffs fs
+
+probeSolution' dataPoints coeffs fs = do
+  factor <- selectImpactFactor
+  percentageContributions dataPoints coeffs factor fs
+  lift $ putStr "Press Enter to repeat or 'n' and Enter to stop: "
+  ln <- lift $ hGetLine stdin
+  case ln of
+    "n" -> return ()
+    _ -> lift (putStrLn "") >> probeSolution' dataPoints coeffs fs
+
+-- print percentage contributions of nodes for a particular impact factor
+percentageContributions :: [[Double]] -> [Double] -> Int -> Features -> St ()
+percentageContributions dataPoints coeffs factor fs = do
+  nodes <- toNodeNames fs >>= toLongNames
+  let (rootv:restv) = map (!!factor) dataPoints
+      linCombVal = sum restv
+      contribs = map ((/linCombVal).(*100)) restv
+
+  lift.print $ param "Actual parent value" (double rootv)
+    <$$> param "Linearly combined value" (double linCombVal)
+    <$$> param "Percentage error" (convert.abs $ (linCombVal-rootv)*100 / rootv)
+    <$$> listContribWithCoeffs (rsortOn (\(_,c,_) -> c) (zip3 nodes contribs coeffs))
+    where listContribWithCoeffs = vcat.(fill 15 (text "Contribution") <+> fill 15 (text "Coefficient") <+> text "Node":).
+                                  map (\(n,v,c) -> fill 15 (yellow.convert $ v) <+>
+                                                   fill 15 (green.convert $ c) <+> 
+                                                   text n)
+          convert = text.($"").showFFloat (Just 4)
+
+selectImpactFactor :: St Int
+selectImpactFactor = do
+  lift $ putStr "Select impact factor [0-197]: "
+  maybeNum <- lift $ hGetLine stdin >>= readMaybe
+  case maybeNum of
+    Nothing -> selectImpactFactor
+    Just n -> if n >= 0 && n < 198
+              then return n
+              else lift (putStrLn "Enter number in valid range") >>
+                   selectImpactFactor
