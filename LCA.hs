@@ -19,7 +19,6 @@ import qualified Data.Set as S
 import System.Console.CmdArgs
 import System.IO
 import System.Random hiding (split)
-import System.Random.Shuffle (shuffle')
 
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
