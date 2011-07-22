@@ -116,12 +116,15 @@ pickElement ditched fs lvl fss = do
   case s of
     (Just f) -> getIrreducible f >>= \irred ->
                 lift (lift $ choose irred lvl) >>= \(cs,ds) ->
-               (if null cs
-                then pickMax (union ditched (fromList ds)) fs
-                             (diff irred (fromList ds)) >>= return.(:[])
-                else return cs) >>= \ps ->
-               reportIrreducible irred ps lvl >>
-               return (Just (ps,ds,irred))
+                case length ds == size irred of
+                  True -> log "Discarding all\n" >> return (Just ([],ds,irred))
+                  False -> 
+                      (if null cs
+                       then pickMax (union ditched (fromList ds)) fs
+                                (diff irred (fromList ds)) >>= return.(:[])
+                       else return cs) >>= \ps ->
+                      reportIrreducible irred ps lvl >>
+                      return (Just (ps,ds,irred))
     Nothing -> return Nothing
 
 pickMax ditched fs irred = do

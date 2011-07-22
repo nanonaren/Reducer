@@ -104,8 +104,10 @@ chooser fs lvl = do
   lift $ print d
 
   includes <- getInput "Enter node numbers to choose (space separated): " names
-  excludes <- getInput "Enter node numbers to discard (space separated): " names
-  return (includes,excludes)
+  excludes <- getInput "Enter node numbers to discard (space separated; 0 to discard all): " (0:names)
+  case elem 0 excludes of
+    True -> return ([],toList fs)
+    False -> return (includes,excludes)
 
 getInput str names = do
   lift.putStr $ str
@@ -114,7 +116,8 @@ getInput str names = do
   let missing = filter (not.flip elem names.fromJust).filter isJust $ lst
       error = not.null.filter isNothing $ lst
   case (error,null missing) of
-    (False,True) -> fmap toList (fromNodeNames.map fromJust $ lst)
+    (False,True) -> if elem (Just 0) lst then return [0]
+                    else fmap toList (fromNodeNames.map fromJust $ lst)
     (False,False) -> liftIO (print.yellow.text $
                              "These nodes " ++ show missing ++
                              " do not exist. Try again.") >>
