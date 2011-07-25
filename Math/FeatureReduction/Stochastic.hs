@@ -71,11 +71,14 @@ complete' lvl fs ditched history = do
              case res of
                Nothing -> complete' nextLvl fs ditched history
                Just (cs,ds,irred) -> do
-                        let fs' = diff fs (fromList $ cs++ds)
-                            lvl' = (size fs') - 5
-                        history' <- calcHistory (union ditched$fromList ds) fs' history
-                        printHistory history'
-                        complete' lvl' fs' (union ditched (fromList ds)) history'
+                        if elem 1 cs
+                         then return (union fs ditched)
+                         else do
+                           let fs' = diff fs (fromList $ cs++ds)
+                               lvl' = (size fs') - 5
+                           history' <- calcHistory (union ditched$fromList ds) fs' history
+                           printHistory history'
+                           complete' lvl' fs' (union ditched (fromList ds)) history'
     where nextLvl = if floor (fromIntegral lvl*1.6) > sz fs
                      then sz fs
                      else floor (fromIntegral lvl*1.6)
@@ -115,16 +118,21 @@ pickElement ditched fs lvl fss = do
   choose <- lift $ gets chooseElement
   case s of
     (Just f) -> getIrreducible f >>= \irred ->
-                lift (lift $ choose irred lvl) >>= \(cs,ds) ->
-                case length ds == size irred of
-                  True -> log "Discarding all\n" >> return (Just ([],ds,irred))
-                  False -> 
-                      (if null cs
-                       then pickMax (union ditched (fromList ds)) fs
-                                (diff irred (fromList ds)) >>= return.(:[])
-                       else return cs) >>= \ps ->
-                      reportIrreducible irred ps lvl >>
-                      return (Just (ps,ds,irred))
+                lift (lift $ choose irred lvl) >>= \(cs',ds') ->
+                (if elem 2 cs' then lift (modify (\st -> st{chooseElement=(\_ _ -> return ([],[]))})) >> return ([],[])
+                  else return (cs',ds')) >>= \(cs,ds) ->
+                if elem 1 cs
+                 then return (Just ([1],[],undefined))
+                 else do
+                   case length ds == size irred of
+                     True -> log "Discarding all\n" >> return (Just ([],ds,irred))
+                     False -> 
+                         (if null cs
+                          then pickMax (union ditched (fromList ds)) fs
+                                   (diff irred (fromList ds)) >>= return.(:[])
+                          else return cs) >>= \ps ->
+                         reportIrreducible irred ps lvl >>
+                         return (Just (ps,ds,irred))
     Nothing -> return Nothing
 
 pickMax ditched fs irred = do
@@ -135,7 +143,7 @@ pickMax ditched fs irred = do
       current <- lift (gets (flip diff fs.flip diff ditched.allFeatures))
       let iss = split 1 irred
       scores <- mapM (lift.lift.phiScore.union current) $ iss
-      --logErr $ "SCORES: " ++ show scores
+      log $ "SCORES: " ++ show scores
       return.head.toList.fst.maximumBy (comparing snd).zip iss $ scores
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
