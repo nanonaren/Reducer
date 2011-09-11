@@ -40,6 +40,7 @@ data Options = Options
     , samples :: Int
     , interactive :: Bool
     , reducennls :: Bool
+    , usememcache :: Bool
     } deriving (Show,Data,Typeable)
 
 data LCA = LCA
@@ -93,6 +94,7 @@ opts = Options
   , samples = 5 &= help "Number of samples" &= typ "INT"
   , interactive = False &= help "Enable to choose element from irreducible"
   , reducennls = False &= help "Just reduce the positive nodes that nnls outputs"
+  , usememcache = False &= help "Use memcache"
   } &= program "LCA Reducer"
     &= summary "Reduce number of nodes required to get a fit"
     &= details ["http://github.com/nanonaren/Reducer"]

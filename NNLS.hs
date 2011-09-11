@@ -10,6 +10,7 @@ import System.IO
 import System.Process (runInteractiveCommand)
 
 nnls :: Int -> [Int] -> St (Double,[Double])
+nnls _ [] = return (0,[])
 nnls root xs = do
   (inp,out) <- gets rp
   maxfits <- gets (maxFits.options)

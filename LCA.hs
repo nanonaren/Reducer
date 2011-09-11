@@ -30,7 +30,7 @@ main = do
   hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
   let lca' = lca{options = args}
-  useThis <- execStateT (setupCache >> setupR >>
+  useThis <- execStateT (setupCache args >> setupR >>
                          setupNodes >> loadLongNames >>
                          setupFeatures) lca'
   case interactive args of
@@ -182,8 +182,8 @@ param name info = fill 30 (text name) <> colon <+> align info
 listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> yellow (double v))
 listNodes = vcat.map text
 
-setupCache :: St ()
-setupCache = do
+setupCache :: Options -> St ()
+setupCache args = when (usememcache args) $ do
   st <- get
   srvr <- liftIO $ connect "127.0.0.1" 11211
   put st{server = srvr}
@@ -241,17 +241,6 @@ myPhi fs = do
              putInCache fs val
              return val
     Just val -> return val
-{-  
-  (other,cached) <- fmap (partition (isNothing.snd)).
-                    mapM (\(i,fs) -> lookupCache fs >>= return.((i,fs),)).
-                    zip [1..] $ fss
-  let (ids,xss) = unzip.fst.unzip $ other
-      cached' = map (\((i,_),v) -> (i,fromJust v)) cached
-  vals <- fmap (fst.unzip).nnlsMap root.map fromFS $ xss
-  mapM_ (uncurry putInCache) $ zip xss vals
-  sequence_.replicate (length fss) $ incCallCount
-  return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
--}
 
 myPhiWithCoeff :: Features -> St (Double,[Double])
 myPhiWithCoeff fs = do
@@ -259,18 +248,21 @@ myPhiWithCoeff fs = do
   fromFS <- gets fromFeatures
   nnls root.fromFS $ fs
 
---myPhi fs = fmap head $ myPhiMap (fs:[])
-
 putInCache :: Features -> Double -> St ()
 putInCache fs val = do
-  srvr <- gets server
-  m <- gets (measure.options)
-  key <- getKey fs
-  liftIO $ C.set srvr key (show val)
-  return ()
+  usecache <- gets (usememcache.options)
+  when usecache $ do
+    srvr <- gets server
+    m <- gets (measure.options)
+    key <- getKey fs
+    liftIO $ C.set srvr key (show val)
+    return ()
 
 lookupCache :: Features -> St (Maybe Double)
-lookupCache fs
+lookupCache fs = do
+  usecache <- gets (usememcache.options)
+  if usecache then lookupCache' fs else return Nothing
+lookupCache' fs
     | size fs == 0 = return (Just 0)
     | otherwise = do
   srvr <- gets server
