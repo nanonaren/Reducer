@@ -11,7 +11,6 @@ module LCASt
     , getFeatures
     ) where
 
-import Pipes
 import Control.Monad.State
 import qualified Data.Map as M
 import Math.FeatureReduction.Features (Features,fromList,union)
@@ -53,7 +52,6 @@ data LCA = LCA
     , fromFeatures :: Features -> [Int]
     , root :: Int
     , server :: Server
-    , pipes :: Pipes
     , numCalls :: Int
     , longNames :: M.Map Int String
     , doc :: Doc
@@ -69,7 +67,6 @@ lca = LCA
   , fromFeatures = undefined
   , root = 0
   , server = undefined
-  , pipes = undefined
   , numCalls = 0
   , longNames = M.empty
   , doc = empty

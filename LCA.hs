@@ -22,7 +22,6 @@ import System.Random hiding (split)
 
 import qualified Network.Memcache as C
 import Network.Memcache.Protocol
-import Pipes
 import Text.PrettyPrint.ANSI.Leijen
 
 import Numeric (showFFloat)
@@ -230,10 +229,19 @@ toNodeNames fs = do
   revN <- gets revNames
   return $ map (read.fromJust.flip M.lookup revN) lns
 
-myPhiMap :: [Features] -> St [Double]
-myPhiMap fss = do
+myPhi :: Features -> St Double
+myPhi fs = do
   root <- gets root
   fromFS <- gets fromFeatures
+  maybeVal <- lookupCache fs
+  incCallCount
+  case maybeVal of
+    Nothing -> do
+             (val,_) <- nnls root.fromFS $ fs
+             putInCache fs val
+             return val
+    Just val -> return val
+{-  
   (other,cached) <- fmap (partition (isNothing.snd)).
                     mapM (\(i,fs) -> lookupCache fs >>= return.((i,fs),)).
                     zip [1..] $ fss
@@ -243,14 +251,15 @@ myPhiMap fss = do
   mapM_ (uncurry putInCache) $ zip xss vals
   sequence_.replicate (length fss) $ incCallCount
   return.snd.unzip.sortOn fst.(++cached').zip ids $ vals
+-}
 
 myPhiWithCoeff :: Features -> St (Double,[Double])
 myPhiWithCoeff fs = do
   root <- gets root
   fromFS <- gets fromFeatures
-  fmap head.nnlsMap root.(:[]).fromFS $ fs
+  nnls root.fromFS $ fs
 
-myPhi fs = fmap head $ myPhiMap (fs:[])
+--myPhi fs = fmap head $ myPhiMap (fs:[])
 
 putInCache :: Features -> Double -> St ()
 putInCache fs val = do

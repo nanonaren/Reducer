@@ -1,27 +1,28 @@
 module NNLS
     (
       setupR
-    , nnlsMap
+    , nnls
     ) where
 
 import LCASt
-import Pipes
 import Control.Monad.State
-import System.IO (hGetLine)
+import System.IO
+import System.Process (runInteractiveCommand)
 
-nnlsMap :: Int -> [[Int]] -> St [(Double,[Double])]
-nnlsMap root xss = do
-  ps <- gets pipes
+nnls :: Int -> [Int] -> St (Double,[Double])
+nnls root xs = do
+  (inp,out) <- gets rp
   maxfits <- gets (maxFits.options)
   method <- gets (measure.options)
   delta <- gets (delta.options)
-  let cmds = map (\xs -> addCode method [1..198] xs root delta) xss
-  liftIO $ pushMap ps handler cmds
-    where handler h = skipStupidLines h >>= \ln ->
-                      let ws = words ln
-                          numFits = read.head $ ws
-                          coeffs = map read.tail $ ws
-                      in return (numFits,coeffs)
+  let cmd = addCode method [1..198] xs root delta
+  liftIO $ do
+    hPutStr inp cmd
+    ln <- skipStupidLines out
+    let ws = words ln
+        numFits = read.head $ ws
+        coeffs = map read.tail $ ws
+    return (numFits,coeffs)
 
 addCode FitMeasure factors children root delta =
     nnlsFitsCode factors children root delta
@@ -71,16 +72,16 @@ nnlsFitsCode factors children root delta =
 
 setupR :: St ()
 setupR = do
-  ps <- liftIO initPipes
   file <- gets (dataFile.options)
   nnlsPath <- gets (nnlsPath.options)
   rscriptPath <- gets (rscriptPath.options)
+  (inp,out,_,_) <- liftIO $ runInteractiveCommand (rscriptPath ++ " --vanilla -")
   liftIO $ do
-    addShellPipe ps (rscriptPath ++ " --vanilla -")
---    addShellPipe ps ("ssh `cat ~/ip` '" ++ rscriptPath ++ " --vanilla -" ++ "'")
+    hSetBuffering inp NoBuffering
+    hSetBuffering out NoBuffering
     let scode = setupCode nnlsPath file
-    pushMap ps (\_ -> return ()) [scode]
-  modify (\s -> s{pipes=ps})
+    hPutStr inp (setupCode nnlsPath file)
+  modify (\s -> s{rp=(inp,out)})
 
 setupCode libloc loc =
     (if null libloc then "library(nnls)\n"

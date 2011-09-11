@@ -58,7 +58,7 @@ Cabal-version:       >=1.2
 
 Executable lca
   Main-Is: LCA.hs
-  Build-depends: ansi-wl-pprint >= 0.6, process >= 1.0, parallel-io >= 0.3, stm >= 2.2, memcached >= 0.2.1, random >= 1.0, cmdargs >= 0.7, MonadRandom >= 0.1, NanoUtils >= 0.1, bitset >= 1.1, containers >= 0.4, mtl >= 2.0, base
+  Build-depends: ansi-wl-pprint >= 0.6, process >= 1.0, memcached >= 0.2.1, random >= 1.0, cmdargs >= 0.7, MonadRandom >= 0.1, NanoUtils >= 0.1, bitset >= 1.1, containers >= 0.4, mtl >= 2.0, base
 
 Executable test
   Main-Is: Math/FeatureReduction/TestAll.hs
