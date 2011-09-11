@@ -43,12 +43,12 @@ Build-type:          Simple
 Cabal-version:       >=1.2
 
 
-Library
+--Library
   -- Modules exported by the library.
-  Exposed-modules:     Math.FeatureReduction.Base, Math.FeatureReduction.Stochastic
+--  Exposed-modules:     Math.FeatureReduction.Base, Math.FeatureReduction.Stochastic
   
   -- Packages needed in order to build this package.
-  Build-depends:     base, bitset >= 1.1, mtl >= 2.0, transformers >= 0.2, NanoUtils >= 0.1, containers >= 0.4, MonadRandom >= 0.1.6
+--  Build-depends:     base, bitset >= 1.1, mtl >= 2.0, transformers >= 0.2, NanoUtils >= 0.1, containers >= 0.4, MonadRandom >= 0.1.6
   
   -- Modules not exported by this package.
   -- Other-modules:       
@@ -56,11 +56,10 @@ Library
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
   -- Build-tools:         
 
-Executable LCA
+Executable lca
   Main-Is: LCA.hs
-  Build-depends: MissingH >= 1.1, ansi-wl-pprint >= 0.6, process >= 1.0, parallel-io >= 0.3, stm >= 2.2, memcached >= 0.2.1, random-shuffle >= 0.0.2, random >= 1.0, cmdargs >= 0.7
+  Build-depends: ansi-wl-pprint >= 0.6, process >= 1.0, parallel-io >= 0.3, stm >= 2.2, memcached >= 0.2.1, random >= 1.0, cmdargs >= 0.7, MonadRandom >= 0.1, NanoUtils >= 0.1, bitset >= 1.1, containers >= 0.4, mtl >= 2.0, base
 
 Executable test
   Main-Is: Math/FeatureReduction/TestAll.hs
-  Build-depends: test-framework >= 0.3.3, HUnit >= 1.2, QuickCheck >= 2.4, test-framework-quickcheck2 >= 0.2, test-framework-hunit >= 0.2
-  Other-modules:
+  Build-depends: test-framework >= 0.3.3, HUnit >= 1.2, QuickCheck >= 2.4, test-framework-quickcheck2 >= 0.2, test-framework-hunit >= 0.2, transformers >= 0.2.2

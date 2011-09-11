@@ -24,9 +24,7 @@ import qualified Network.Memcache as C
 import Network.Memcache.Protocol
 import Pipes
 import Text.PrettyPrint.ANSI.Leijen
-import Data.String.Utils (split)
 
-import Math.FeatureReduction.Greedy
 import Numeric (showFFloat)
 
 main = do
@@ -45,13 +43,7 @@ main = do
             evalStateT (summaryHeader >> getFeaturesForReduction >>=
                         runInteractive) useThis
 
-runBestFirst lca = undefined {-do
-  stuff <- evalStateT (getFeatures >>= \fs ->
-                       greedy fs myPhi 0 5 >>= \(fs',v) ->
-                       toNodeNames fs' >>= \names ->
-                       gets numCalls >>= \num ->
-                       return (num,names,v)) lca
-  print stuff-}
+runBestFirst lca = undefined
 
 getFeaturesForReduction :: St Features
 getFeaturesForReduction = do
@@ -363,3 +355,33 @@ selectImpactFactor = do
               then return n
               else lift (putStrLn "Enter number in valid range") >>
                    selectImpactFactor
+
+
+
+-- from package missingH, just want to avoid dependency
+spanList :: ([a] -> Bool) -> [a] -> ([a], [a])
+
+spanList _ [] = ([],[])
+spanList func list@(x:xs) =
+    if func list
+       then (x:ys,zs)
+       else ([],list)
+    where (ys,zs) = spanList func xs
+
+{- | Similar to Data.List.break, but performs the test on the entire remaining
+list instead of just one element.
+-}
+breakList :: ([a] -> Bool) -> [a] -> ([a], [a])
+breakList func = spanList (not . func)
+
+split :: Eq a => [a] -> [a] -> [[a]]
+split _ [] = []
+split delim str =
+    let (firstline, remainder) = breakList (isPrefixOf delim) str
+        in 
+        firstline : case remainder of
+                                   [] -> []
+                                   x -> if x == delim
+                                        then [] : []
+                                        else split delim 
+                                                 (drop (length delim) x)
