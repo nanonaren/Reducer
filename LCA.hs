@@ -34,16 +34,11 @@ main = do
   useThis <- execStateT (setupCache >> setupR >>
                          setupNodes >> loadLongNames >>
                          setupFeatures) lca'
-  when (bestfirst args) $ runBestFirst useThis
   case interactive args of
-    False -> when (mine args) $
-             evalStateT (summaryHeader >> getFeaturesForReduction >>=
+    False -> evalStateT (summaryHeader >> getFeaturesForReduction >>=
                          runAll) useThis
-    True -> when (mine args) $
-            evalStateT (summaryHeader >> getFeaturesForReduction >>=
+    True -> evalStateT (summaryHeader >> getFeaturesForReduction >>=
                         runInteractive) useThis
-
-runBestFirst lca = undefined
 
 getFeaturesForReduction :: St Features
 getFeaturesForReduction = do

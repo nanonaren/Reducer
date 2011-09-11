@@ -40,8 +40,6 @@ data Options = Options
     , runs :: Int
     , samples :: Int
     , interactive :: Bool
-    , bestfirst :: Bool
-    , mine :: Bool
     , reducennls :: Bool
     } deriving (Show,Data,Typeable)
 
@@ -97,8 +95,6 @@ opts = Options
   , runs = 1 &= help "Number of runs" &= typ "INT"
   , samples = 5 &= help "Number of samples" &= typ "INT"
   , interactive = False &= help "Enable to choose element from irreducible"
-  , bestfirst = False &= help "Run best first"
-  , mine = False &= help "Run mine"
   , reducennls = False &= help "Just reduce the positive nodes that nnls outputs"
   } &= program "LCA Reducer"
     &= summary "Reduce number of nodes required to get a fit"
