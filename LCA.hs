@@ -112,17 +112,17 @@ getInput str names = do
                     else if elem (Just 1) lst then return [1]
                     else if elem (Just 2) lst then return [2]
                     else fmap toList (fromNodeNames.map fromJust $ lst)
-    (False,False) -> liftIO (print.yellow.text $
+    (False,False) -> liftIO (print.text $
                              "These nodes " ++ show missing ++
                              " do not exist. Try again.") >>
                      getInput str names
-    (True,_) -> liftIO (print.yellow.text $ "Error reading some nodes. Try again.") >>
+    (True,_) -> liftIO (print.text $ "Error reading some nodes. Try again.") >>
                 getInput str names
 
 readMaybe :: String -> IO (Maybe Int)
 readMaybe str = do
     case reads str of
-      [] -> print (yellow.text $ str ++ " not a valid number.") >> return Nothing
+      [] -> print (text $ str ++ " not a valid number.") >> return Nothing
       [(val,_)] -> return (Just val)
 
 summaryHeader :: St ()
@@ -179,7 +179,7 @@ loadLongNames = do
 
 param name info = fill 30 (text name) <> colon <+> align info
 
-listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> yellow (double v))
+listNodesWithCoeffs = vcat.map (\(n,v) -> text n <> colon <+> double v)
 listNodes = vcat.map text
 
 setupCache :: Options -> St ()
@@ -282,7 +282,7 @@ myFoundIrreducible :: Features -> [Int] -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs >>= toLongNames
   chosen' <- toNodeNames (fromList chosen)
-  lift.print.yellow $
+  lift.print $
       text "Choosing:" <+> (hsep.punctuate comma.map int $ chosen')
   let d = hsep.punctuate semi $
           [ text "LEVEL:" <+> (int lvl)
@@ -336,8 +336,8 @@ percentageContributions dataPoints coeffs factor fs = do
     <$$> param "Percentage error" (convert.abs $ (linCombVal-rootv)*100 / rootv)
     <$$> listContribWithCoeffs (rsortOn (\(_,c,_) -> c) (zip3 nodes contribs coeffs))
     where listContribWithCoeffs = vcat.(fill 15 (text "Contribution") <+> fill 15 (text "Coefficient") <+> text "Node":).
-                                  map (\(n,v,c) -> fill 15 (yellow.convert $ v) <+>
-                                                   fill 15 (green.convert $ c) <+> 
+                                  map (\(n,v,c) -> fill 15 (convert $ v) <+>
+                                                   fill 15 (convert $ c) <+> 
                                                    text n)
           convert = text.($"").showFFloat (Just 4)
 
