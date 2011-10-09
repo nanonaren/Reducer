@@ -29,7 +29,9 @@ import Numeric (showFFloat)
 main = do
   hSetBuffering stdout NoBuffering
   args <- cmdArgs opts
-  let lca' = lca{options = args}
+  out <- openFile (outputFile args ++ ".run") WriteMode
+  hSetBuffering out NoBuffering
+  let lca' = lca{options = args,outHandle = out}
   useThis <- execStateT (setupCache args >> setupR >>
                          setupNodes >> loadLongNames >>
                          setupFeatures) lca'
@@ -77,13 +79,23 @@ runInteractive fs = do
               summaryRun i.diff fs
   run 1
 
-info = lift.putStr
+-- | print both to output file and stdout
+info str = do
+  h <- gets outHandle
+  lift.hPutStr h $ str
+  lift.putStr $ str
+
+printInfo = info.show
+
+printCoeffsToFile doc = do
+  file <- gets ((++".coeffs").outputFile.options)
+  lift $ writeFile file (show doc)
 
 chooserEcho fs lvl = do
   names <- toNodeNames fs
   fs' <- toLongNames names
-  let d = text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
-  lift $ print d
+  let d = text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs') <$> empty
+  printInfo d
   return ([],[])
 
 chooser fs lvl = do
@@ -94,7 +106,7 @@ chooser fs lvl = do
           , text "ACTUAL:" <+> (int $ length fs')
           , text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
           ]
-  lift $ print d
+  printInfo (d <$> empty)
 
   includes <- getInput "Enter node numbers to choose (space separated): " names
   excludes <- getInput ("Enter node numbers to discard (space separated; 0 to discard all\n" ++
@@ -143,7 +155,7 @@ summaryHeader = do
   nodes <- toNodeNames fs >>= toLongNames >>=
            return.filter ((>0).snd).flip zip coeffs
 
-  liftIO.print $
+  printInfo $
         param "Tree" (text tree) <$$>
         param "Known Nodes" (listNodes kchildren) <$$>
         param "Raw NNLS" (listNodesWithCoeffs nodes) <$$>
@@ -162,13 +174,16 @@ summaryRun i fs = do
   calls <- gets numCalls
   (val,coeffs) <- myPhiWithCoeff fs
   nodes <- toNodeNames fs >>= toLongNames >>= return.flip zip coeffs
-  liftIO.print $
+  let coeffsDoc = listNodesWithCoeffs nodes
+  printCoeffsToFile coeffsDoc
+
+  printInfo $
         text "===== Run" <+> int i <+> text "=====" <$$>
         param "Num calls" (int calls) <$$>
         param "NNLS value" (double val) <$$>
-        param "Discovered Tree" (listNodesWithCoeffs nodes) <$$>
+        param "Discovered Tree" coeffsDoc <$$>
         param "Irreducibles" d <$$> text ""
-  probeSolution fs
+  printImpactStatsToFile fs
 
 toLongNames :: [Int] -> St [String]
 toLongNames xs = do
@@ -291,8 +306,8 @@ myFoundIrreducible :: Features -> [Int] -> Int -> St ()
 myFoundIrreducible fs chosen lvl = do
   fs' <- toNodeNames fs >>= toLongNames
   chosen' <- toNodeNames (fromList chosen)
-  lift.print $
-      text "Choosing:" <+> (hsep.punctuate comma.map int $ chosen')
+  printInfo $
+      text "Choosing:" <+> (hsep.punctuate comma.map int $ chosen') <$> empty
   let d = hsep.punctuate semi $
           [ text "LEVEL:" <+> (int lvl)
           , text "ACTUAL:" <+> (int $ length fs')
@@ -301,12 +316,17 @@ myFoundIrreducible fs chosen lvl = do
           ]
   modify (\st -> st{doc = doc st <$$> d})
 
+printImpactStatsToFile :: Features -> St ()
+printImpactStatsToFile fs = do
+  file <- gets ((++".factors").outputFile.options)
+  h <- lift $ openFile file WriteMode
+  lift.putStr $ "Writing impact factor stats..."
+  probeSolution fs h
+  lift.putStr $ "DONE\n"
+  lift $ hClose h
 
-
-
-
-probeSolution :: Features -> St ()
-probeSolution fs = do
+probeSolution :: Features -> Handle -> St ()
+probeSolution fs outH = do
   root <- gets root
   (_,coeffs) <- myPhiWithCoeff fs
   nodeLineNums <- gets ((root:).($fs).fromFeatures)
@@ -321,47 +341,27 @@ probeSolution fs = do
                   map (map read) $ childRows
       parentData = map read rootRow
 
-  probeSolution' (parentData : childData) coeffs fs
-
-probeSolution' dataPoints coeffs fs = do
-  factor <- selectImpactFactor
-  percentageContributions dataPoints coeffs factor fs
-  lift $ putStr "Press Enter to repeat or 'n' and Enter to stop: "
-  ln <- lift $ hGetLine stdin
-  case ln of
-    "n" -> return ()
-    _ -> lift (putStrLn "") >> probeSolution' dataPoints coeffs fs
+  mapM_ (percentageContributions (parentData : childData) coeffs fs outH) [0..197]
 
 -- print percentage contributions of nodes for a particular impact factor
-percentageContributions :: [[Double]] -> [Double] -> Int -> Features -> St ()
-percentageContributions dataPoints coeffs factor fs = do
+percentageContributions :: [[Double]] -> [Double] -> Features -> Handle -> Int -> St ()
+percentageContributions dataPoints coeffs fs outH factor = do
   nodes <- toNodeNames fs >>= toLongNames
   let (rootv:restv) = map (!!factor) dataPoints
       linCombVal = sum restv
       contribs = map ((/linCombVal).(*100)) restv
 
-  lift.print $ param "Actual parent value" (double rootv)
+  lift.hPutStrLn outH.show $ param "Impact factor number" (text "#" <> int factor)
+    <$$> param "Actual parent value" (double rootv)
     <$$> param "Linearly combined value" (double linCombVal)
     <$$> param "Percentage error" (convert.abs $ (linCombVal-rootv)*100 / rootv)
     <$$> listContribWithCoeffs (rsortOn (\(_,c,_) -> c) (zip3 nodes contribs coeffs))
+    <$> empty
     where listContribWithCoeffs = vcat.(fill 15 (text "Contribution") <+> fill 15 (text "Coefficient") <+> text "Node":).
                                   map (\(n,v,c) -> fill 15 (convert $ v) <+>
                                                    fill 15 (convert $ c) <+> 
                                                    text n)
           convert = text.($"").showFFloat (Just 4)
-
-selectImpactFactor :: St Int
-selectImpactFactor = do
-  lift $ putStr "Select impact factor [0-197]: "
-  maybeNum <- lift $ hGetLine stdin >>= readMaybe
-  case maybeNum of
-    Nothing -> selectImpactFactor
-    Just n -> if n >= 0 && n < 198
-              then return n
-              else lift (putStrLn "Enter number in valid range") >>
-                   selectImpactFactor
-
-
 
 -- from package missingH, just want to avoid dependency
 spanList :: ([a] -> Bool) -> [a] -> ([a], [a])

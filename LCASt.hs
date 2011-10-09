@@ -35,6 +35,7 @@ data Options = Options
     , mustIncludeCat :: FilePath
     , numRandomNodes :: Int
     , namesFile :: FilePath
+    , outputFile :: FilePath
     , measure :: LCAMeasure
     , knownChildren :: String
     , runs :: Int
@@ -57,6 +58,7 @@ data LCA = LCA
     , numCalls :: Int
     , longNames :: M.Map Int String
     , doc :: Doc
+    , outHandle :: Handle
     }
 
 lca = LCA
@@ -72,6 +74,7 @@ lca = LCA
   , numCalls = 0
   , longNames = M.empty
   , doc = empty
+  , outHandle = undefined
   }
 
 type St = StateT LCA IO
@@ -89,6 +92,7 @@ opts = Options
   , mustIncludeCat = "data/includecat" &= help "Must include categories" &= typFile
   , numRandomNodes = 0 &= help "Number of extra random nodes to include" &= typ "INT"
   , namesFile = "data/allnames.tab" &= help "Node names file" &= typFile
+  , outputFile = "output" &= help "File to output results to" &= typFile
   , measure = enum [FitMeasure &= help "Use fits to measure closeness",
                     DistMeasure &= help "Use distance to measure closeness"]
   , knownChildren = def &= help "Known children"
