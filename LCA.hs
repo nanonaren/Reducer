@@ -63,7 +63,7 @@ runAll fs = do
   let run i = modify (\st -> st{doc = empty,numCalls=0}) >>
               liftIO newStdGen >>=
               runR fs myPhi numSamples myFoundIrreducible
-                   (\_ _ -> return ([],[])) info target fs >>=
+                   chooserEcho info target fs >>=
               summaryRun i.diff fs
   mapM_ run [1..nruns]
 
@@ -78,6 +78,13 @@ runInteractive fs = do
   run 1
 
 info = lift.putStr
+
+chooserEcho fs lvl = do
+  names <- toNodeNames fs
+  fs' <- toLongNames names
+  let d = text "IRRED:" <+> (braces.align.vsep.punctuate comma.map text $ fs')
+  lift $ print d
+  return ([],[])
 
 chooser fs lvl = do
   names <- toNodeNames fs

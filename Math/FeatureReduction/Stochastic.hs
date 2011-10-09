@@ -143,7 +143,7 @@ pickMax ditched fs irred = do
       current <- lift (gets (flip diff fs.flip diff ditched.allFeatures))
       let iss = split 1 irred
       scores <- mapM (lift.lift.phiScore.union current) $ iss
-      log $ "SCORES: " ++ show scores
+      log $ "SCORES: " ++ show scores ++ "\n"
       return.head.toList.fst.maximumBy (comparing snd).zip iss $ scores
 
 getIrreducible :: (RandomGen g, Monad m) => Features -> R g m Features
