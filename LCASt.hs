@@ -31,6 +31,7 @@ data Options = Options
     , rootNode :: String
     , delta :: Double
     , mustInclude :: FilePath
+    , excludes :: FilePath
     , mustIncludeCat :: FilePath
     , numRandomNodes :: Int
     , namesFile :: FilePath
@@ -84,6 +85,7 @@ opts = Options
   , rootNode = def &= help "Root node" &= typ "INT"
   , delta = 0.15 &= help "Allowable fit error" &= typ "DOUBLE"
   , mustInclude = "data/includenodes" &= help "Must include nodes" &= typFile
+  , excludes = "data/excludenodes" &= help "Must exclude nodes" &= typFile
   , mustIncludeCat = "data/includecat" &= help "Must include categories" &= typFile
   , numRandomNodes = 0 &= help "Number of extra random nodes to include" &= typ "INT"
   , namesFile = "data/allnames.tab" &= help "Node names file" &= typFile

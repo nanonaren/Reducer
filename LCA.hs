@@ -192,10 +192,12 @@ setupNodes :: St ()
 setupNodes = do
   st <- gets options
   mustInc <- fmap (map (head.words).lines) $ liftIO (readFile (mustInclude st))
+  mustExclude <- fmap (map (head.words).lines) $ liftIO (readFile (excludes st))
   mustIncCat <- fmap (map (head.words).lines) $ liftIO (readFile (mustIncludeCat st))
   allnmsList <- fmap (flip zip [1..].map words.lines) $
                 liftIO (readFile (namesFile st))
-  let allnms = M.fromList.map (\(xs,i) -> (head xs,i)) $
+  let allnms = M.fromList.map (\(xs,i) -> (head xs,i)).
+               filter (not.flip elem mustExclude.head.fst) $
                filter (flip elem mustInc.head.fst) allnmsList ++
                filter (flip elem mustIncCat.last.fst) allnmsList
 
